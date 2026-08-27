@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm --prefix ripple-app run build",
+  "outputDirectory": "ripple-app/dist",
+  "installCommand": "npm --prefix ripple-app install",
+  "framework": "vite"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "planb",
+  "version": "1.0.0",
+  "private": true,
+  "description": "planB - Real-time Travel Disruption & Re-accommodation Engine",
+  "scripts": {
+    "dev": "npm --prefix ripple-app run dev",
+    "build": "npm --prefix ripple-app run build",
+    "postinstall": "npm --prefix ripple-app install",
+    "demo": "npx ts-node src/demo.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "ts-node": "^10.9.0",
+    "@types/node": "^20.0.0"
+  }
+}
