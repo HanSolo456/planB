@@ -431,10 +431,17 @@ export function getAtRiskConnections(
 //
 // Uses getAtRiskConnections(itinerary) as the base ground-truth signal.
 // Calibrated weights:
-//   - Critical connection (buffer shortfall): -40 pts
-//   - Tight connection with 0 min surplus: -28 pts (razor-thin, zero slack)
-//   - Tight connection with 1-15 min surplus: -20 pts
-//   - Tight connection with 16-30 min surplus: -14 pts
+//   - Critical connection (buffer shortfall): 42 pts
+//   - Tight connection with 0 min surplus: 28 pts (razor-thin, zero slack)
+//   - Tight connection with 1-15 min surplus: 20 pts
+//   - Tight connection with 16-30 min surplus: 14 pts
+//
+// Non-linear diminishing returns multipliers (by severity rank):
+//   - 1st: 1.00 (100%)
+//   - 2nd: 0.75 (75%)
+//   - 3rd: 0.50 (50%)
+//   - 4th: 0.35 (35%)
+//   - 5th+: 0.25 (25%)
 //
 // Thresholds:
 //   - 'low': score >= 75
@@ -444,25 +451,35 @@ export function getAtRiskConnections(
 export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
   const atRiskConns = getAtRiskConnections(itinerary);
 
-  const legRisks = atRiskConns.map((conn) => {
+  const BASE_WEIGHTS = {
+    critical: 42,
+    zeroSlack: 28,
+    moderateSlack: 20,
+    comfortableSlack: 14,
+  };
+
+  const DECAY_FACTORS = [1.0, 0.75, 0.5, 0.35, 0.25];
+
+  // First extract raw points and reasons for each connection
+  const rawLegs = atRiskConns.map((conn) => {
     const isCritical = conn.riskLevel === "critical";
     const surplus = conn.bufferRemaining - conn.booking.bufferMinutes;
 
-    let riskContribution = 0;
-    let reason = "";
+    let rawPoints = 0;
+    let baseReason = "";
 
     if (isCritical) {
-      riskContribution = 40;
-      reason = `Infeasible schedule: ${conn.bufferShortfallMinutes} min shortfall before start time.`;
+      rawPoints = BASE_WEIGHTS.critical;
+      baseReason = `Infeasible schedule: ${conn.bufferShortfallMinutes} min shortfall before start time.`;
     } else if (surplus <= 0) {
-      riskContribution = 28;
-      reason = `Zero margin: ${conn.bufferRemaining} min transfer window leaves 0 min buffer for upstream delays.`;
+      rawPoints = BASE_WEIGHTS.zeroSlack;
+      baseReason = `Zero margin: ${conn.bufferRemaining} min transfer window leaves 0 min buffer for upstream delays.`;
     } else if (surplus <= 15) {
-      riskContribution = 20;
-      reason = `Tight buffer: ${conn.bufferRemaining} min available provides only ${surplus} min safety margin.`;
+      rawPoints = BASE_WEIGHTS.moderateSlack;
+      baseReason = `Tight buffer: ${conn.bufferRemaining} min available provides only ${surplus} min safety margin.`;
     } else {
-      riskContribution = 14;
-      reason = `Limited buffer: ${conn.bufferRemaining} min available provides ${surplus} min safety margin.`;
+      rawPoints = BASE_WEIGHTS.comfortableSlack;
+      baseReason = `Limited buffer: ${conn.bufferRemaining} min available provides ${surplus} min safety margin.`;
     }
 
     const depTitle = conn.dependencyBooking.title.split(" — ")[0];
@@ -472,13 +489,28 @@ export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
     return {
       bookingId: conn.booking.id,
       connectionLabel,
-      riskContribution,
-      reason,
+      rawPoints,
+      baseReason,
     };
   });
 
-  // Sort legRisks by riskContribution descending (worst offender first)
-  legRisks.sort((a, b) => b.riskContribution - a.riskContribution);
+  // Sort descending by raw severity so worst offender gets 1.0 factor
+  rawLegs.sort((a, b) => b.rawPoints - a.rawPoints);
+
+  // Apply diminishing returns factor according to severity rank
+  const legRisks = rawLegs.map((item, idx) => {
+    const factor =
+      idx < DECAY_FACTORS.length
+        ? DECAY_FACTORS[idx]
+        : DECAY_FACTORS[DECAY_FACTORS.length - 1];
+    const riskContribution = Math.round(item.rawPoints * factor);
+    return {
+      bookingId: item.bookingId,
+      connectionLabel: item.connectionLabel,
+      riskContribution,
+      reason: item.baseReason,
+    };
+  });
 
   const totalDeductions = legRisks.reduce(
     (sum, item) => sum + item.riskContribution,
