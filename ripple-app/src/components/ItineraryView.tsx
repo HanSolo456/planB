@@ -5,6 +5,8 @@ import { useAppState } from '../App';
 import BookingCard from './BookingCard';
 import DisruptionBanner from './DisruptionBanner';
 import DisruptionAssistant from './DisruptionAssistant';
+import TripRiskBadge from './TripRiskBadge';
+import { calculateTripRiskScore } from '../lib/impactEngine';
 import { Clock, CheckCircle2, X } from 'lucide-react';
 
 interface Props {
@@ -63,6 +65,9 @@ export default function ItineraryView({ itinerary }: Props) {
     () => itinerary.bookings.reduce((sum, b) => sum + b.cost, 0),
     [itinerary]
   );
+
+  // Overall Trip Risk Score
+  const tripRisk = useMemo(() => calculateTripRiskScore(itinerary), [itinerary]);
 
   return (
     <div>
@@ -126,7 +131,7 @@ export default function ItineraryView({ itinerary }: Props) {
           </div>
 
           {/* Operational Metrics (IBM Plex Mono) */}
-          <div className="grid grid-cols-3 gap-4 font-mono text-center sm:text-right border-t sm:border-t-0 sm:border-l border-[#EBE7DF] pt-3 sm:pt-0 sm:pl-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-center sm:text-right border-t sm:border-t-0 sm:border-l border-[#EBE7DF] pt-3 sm:pt-0 sm:pl-5">
             <div>
               <span className="text-2xs text-[#969188] uppercase block">TOTAL SEGMENTS</span>
               <span className="text-base font-bold text-[#1C1B19]">{itinerary.bookings.length}</span>
@@ -138,7 +143,7 @@ export default function ItineraryView({ itinerary }: Props) {
               </span>
             </div>
             <div>
-              <span className="text-2xs text-[#969188] uppercase block">PROACTIVE RISKS</span>
+              <span className="text-2xs text-[#969188] uppercase block">BUFFER RISKS</span>
               <span
                 className="text-base font-bold"
                 style={{
@@ -148,9 +153,28 @@ export default function ItineraryView({ itinerary }: Props) {
                 {atRiskConnections.length}
               </span>
             </div>
+            <div>
+              <span className="text-2xs text-[#969188] uppercase block">RESILIENCE</span>
+              <span
+                className="text-base font-bold"
+                style={{
+                  color:
+                    tripRisk.level === 'low'
+                      ? 'var(--color-confirmed)'
+                      : tripRisk.level === 'moderate'
+                      ? 'var(--color-at-risk)'
+                      : 'var(--color-disrupted)',
+                }}
+              >
+                {tripRisk.overallScore}/100
+              </span>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Trip Risk Score & Resilience Console Gauge */}
+      <TripRiskBadge itinerary={itinerary} />
 
       {/* Natural Language Disruption Assistant Terminal */}
       <DisruptionAssistant itinerary={itinerary} />

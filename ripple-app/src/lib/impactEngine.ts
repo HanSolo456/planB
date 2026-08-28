@@ -17,6 +17,7 @@ import type {
   Disruption,
   ImpactedBooking,
   AtRiskConnection,
+  TripRiskScore,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -421,3 +422,77 @@ export function getAtRiskConnections(
     return b.bufferShortfallMinutes - a.bufferShortfallMinutes;
   });
 }
+
+// =============================================================================
+// PROACTIVE FUNCTION: calculateTripRiskScore
+//
+// Computes an overall itinerary scheduling robustness score (0-100).
+// 100 = perfectly resilient / safe schedule.
+//
+// Uses getAtRiskConnections(itinerary) as the base ground-truth signal.
+// Calibrated weights:
+//   - Critical connection (buffer shortfall): -40 pts
+//   - Tight connection with 0 min surplus: -28 pts (razor-thin, zero slack)
+//   - Tight connection with 1-15 min surplus: -20 pts
+//   - Tight connection with 16-30 min surplus: -14 pts
+//
+// Thresholds:
+//   - 'low': score >= 75
+//   - 'moderate': 40 <= score < 75
+//   - 'high': score < 40
+// =============================================================================
+export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
+  const atRiskConns = getAtRiskConnections(itinerary);
+
+  const legRisks = atRiskConns.map((conn) => {
+    const isCritical = conn.riskLevel === "critical";
+    const surplus = conn.bufferRemaining - conn.booking.bufferMinutes;
+
+    let riskContribution = 0;
+    let reason = "";
+
+    if (isCritical) {
+      riskContribution = 40;
+      reason = `Infeasible schedule: ${conn.bufferShortfallMinutes} min shortfall before start time.`;
+    } else if (surplus <= 0) {
+      riskContribution = 28;
+      reason = `Zero margin: ${conn.bufferRemaining} min transfer window leaves 0 min buffer for upstream delays.`;
+    } else if (surplus <= 15) {
+      riskContribution = 20;
+      reason = `Tight buffer: ${conn.bufferRemaining} min available provides only ${surplus} min safety margin.`;
+    } else {
+      riskContribution = 14;
+      reason = `Limited buffer: ${conn.bufferRemaining} min available provides ${surplus} min safety margin.`;
+    }
+
+    const depTitle = conn.dependencyBooking.title.split(" — ")[0];
+    const arrTitle = conn.booking.title.split(" — ")[0];
+    const connectionLabel = `${depTitle} → ${arrTitle}`;
+
+    return {
+      bookingId: conn.booking.id,
+      connectionLabel,
+      riskContribution,
+      reason,
+    };
+  });
+
+  // Sort legRisks by riskContribution descending (worst offender first)
+  legRisks.sort((a, b) => b.riskContribution - a.riskContribution);
+
+  const totalDeductions = legRisks.reduce(
+    (sum, item) => sum + item.riskContribution,
+    0
+  );
+  const overallScore = Math.max(0, Math.min(100, 100 - totalDeductions));
+
+  const level: "low" | "moderate" | "high" =
+    overallScore >= 75 ? "low" : overallScore >= 40 ? "moderate" : "high";
+
+  return {
+    overallScore,
+    level,
+    legRisks,
+  };
+}
+

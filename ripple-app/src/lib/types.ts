@@ -180,3 +180,22 @@ export interface AtRiskConnection {
   /** 'tight' = within 30 min of limit; 'critical' = under the limit already */
   riskLevel: "tight" | "critical";
 }
+
+// ---------------------------------------------------------------------------
+// TRIP RISK SCORE
+// Evaluates whole-itinerary schedule robustness (0-100, where 100 = safest).
+// ---------------------------------------------------------------------------
+export interface TripRiskScore {
+  /** 0 to 100, where 100 = safest / fully resilient */
+  overallScore: number;
+  /** Risk classification: low (>=75), moderate (40-74), high (<40) */
+  level: "low" | "moderate" | "high";
+  /** Individual connection risk breakdown, sorted by riskContribution descending */
+  legRisks: {
+    bookingId: string;
+    connectionLabel: string;
+    riskContribution: number;
+    reason: string;
+  }[];
+}
+
