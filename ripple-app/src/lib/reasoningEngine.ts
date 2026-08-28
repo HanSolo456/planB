@@ -194,3 +194,13 @@ export function clearExplanationCache(): void {
 export function getExplanationCacheSize(): number {
   return explanationCache.size;
 }
+
+// ---------------------------------------------------------------------------
+// NATURAL LANGUAGE DISRUPTION PARSER RE-EXPORT
+// ---------------------------------------------------------------------------
+export { parseDisruptionFromText } from './nlDisruptionEngine';
+export type {
+  ParseDisruptionResult,
+  DisruptionSuccess,
+  DisruptionClarification,
+} from './nlDisruptionEngine';

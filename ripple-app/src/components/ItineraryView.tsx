@@ -4,6 +4,7 @@ import { getAtRiskConnections } from '../lib/impactEngine';
 import { useAppState } from '../App';
 import BookingCard from './BookingCard';
 import DisruptionBanner from './DisruptionBanner';
+import DisruptionAssistant from './DisruptionAssistant';
 import { Clock, CheckCircle2, X } from 'lucide-react';
 
 interface Props {
@@ -150,6 +151,9 @@ export default function ItineraryView({ itinerary }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Natural Language Disruption Assistant Terminal */}
+      <DisruptionAssistant itinerary={itinerary} />
 
       {/* Itinerary Timeline */}
       <div className="relative pl-6 sm:pl-8">
