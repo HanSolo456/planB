@@ -1,4 +1,5 @@
 import { MapPin, Calendar, User, PlusCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Itinerary } from '../lib/types';
 import { useAppState } from '../App';
 
@@ -7,7 +8,8 @@ interface Props {
 }
 
 export default function ItineraryTabs({ itineraries }: Props) {
-  const { selectedItinerary, setSelectedItinerary, setShowImportView } = useAppState();
+  const navigate = useNavigate();
+  const { selectedItinerary, setSelectedItinerary } = useAppState();
 
   return (
     <div className="mb-6">
@@ -89,7 +91,7 @@ export default function ItineraryTabs({ itineraries }: Props) {
       {/* Import Trip — entry point */}
       <button
         id="tab-import-trip"
-        onClick={() => setShowImportView(true)}
+        onClick={() => navigate('/app/import')}
         className="w-full text-left p-4 rounded-[2px] transition-colors duration-150 cursor-pointer flex items-center justify-between group"
         style={{
           backgroundColor: 'var(--color-bg-surface-alt)',

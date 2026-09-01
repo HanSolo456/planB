@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, createContext, useContext } from 'react';
+import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { itineraryA, itineraryB } from './lib/seedData';
 import type { Itinerary, Disruption, ImpactedBooking, ScoredRecoveryOption } from './lib/types';
 import { detectImpact } from './lib/impactEngine';
@@ -11,8 +12,7 @@ import ImportView from './components/ImportView';
 import LandingPage from './components/LandingPage';
 
 // ---------------------------------------------------------------------------
-// App-level state shape — structured so disruption + recovery view can slot in
-// cleanly in the next iteration.
+// App-level state shape
 // ---------------------------------------------------------------------------
 export interface AppState {
   selectedItinerary: Itinerary;
@@ -27,8 +27,6 @@ export interface AppState {
   recoverySuccessMessage: string | null;
   clearRecoverySuccess: () => void;
   // Import feature
-  showImportView: boolean;
-  setShowImportView: (show: boolean) => void;
   addImportedItinerary: (it: Itinerary) => void;
 }
 
@@ -43,16 +41,57 @@ export function useAppState(): AppState {
 // Seed itineraries — imported trips get appended at runtime
 const SEED_ITINERARIES: Itinerary[] = [itineraryA, itineraryB];
 
+// ---------------------------------------------------------------------------
+// Dashboard layout — shared shell for /app/dashboard, /app/import, /app/recovery
+// ---------------------------------------------------------------------------
+function DashboardLayout({ itineraries }: { itineraries: Itinerary[] }) {
+  const { selectedItinerary, showRecoveryOptions } = useAppState();
+
+  return (
+    <div
+      className="min-h-screen font-body antialiased"
+      style={{
+        backgroundColor: 'var(--color-bg-base)',
+        color: 'var(--color-text-main)',
+      }}
+    >
+      <Header />
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        <Routes>
+          <Route
+            path="dashboard"
+            element={
+              <>
+                {!showRecoveryOptions && (
+                  <ItineraryTabs itineraries={itineraries} />
+                )}
+                <ItineraryView itinerary={selectedItinerary} />
+              </>
+            }
+          />
+          <Route path="import" element={<ImportView />} />
+          <Route path="recovery" element={<RecoveryView />} />
+          {/* Fallback: redirect /app/* to /app/dashboard */}
+          <Route path="*" element={<Navigate to="dashboard" replace />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Root App — owns all shared state, provides context, defines top-level routes
+// ---------------------------------------------------------------------------
 export default function App() {
-  const [showLanding, setShowLanding] = useState<boolean>(true);
+  const navigate = useNavigate();
+
   const [itineraries, setItineraries] = useState<Itinerary[]>(SEED_ITINERARIES);
   const [selectedItinerary, setSelectedItineraryState] = useState<Itinerary>(itineraryA);
   const [activeDisruption, setActiveDisruption] = useState<Disruption | null>(null);
-  const [showRecoveryOptions, setShowRecoveryOptions] = useState<boolean>(false);
+  const [showRecoveryOptions, setShowRecoveryOptionsState] = useState<boolean>(false);
   const [recoverySuccessMessage, setRecoverySuccessMessage] = useState<string | null>(null);
-  const [showImportView, setShowImportView] = useState<boolean>(false);
 
-  // Derive impacted bookings whenever activeDisruption or selectedItinerary changes
   const impactedBookings = useMemo<ImpactedBooking[]>(() => {
     if (!activeDisruption) return [];
     try {
@@ -63,23 +102,34 @@ export default function App() {
     }
   }, [selectedItinerary, activeDisruption]);
 
+  const setShowRecoveryOptions = useCallback((show: boolean) => {
+    setShowRecoveryOptionsState(show);
+    if (show) {
+      navigate('/app/recovery');
+    } else {
+      navigate('/app/dashboard');
+    }
+  }, [navigate]);
+
   const clearDisruption = useCallback(() => {
     setActiveDisruption(null);
-    setShowRecoveryOptions(false);
-  }, []);
+    setShowRecoveryOptionsState(false);
+    navigate('/app/dashboard');
+  }, [navigate]);
 
   const setSelectedItinerary = useCallback((it: Itinerary) => {
     setSelectedItineraryState(it);
     setActiveDisruption(null);
-    setShowRecoveryOptions(false);
+    setShowRecoveryOptionsState(false);
     setRecoverySuccessMessage(null);
-  }, []);
+    navigate('/app/dashboard');
+  }, [navigate]);
 
   const applyRecovery = useCallback((option: ScoredRecoveryOption) => {
     const recovered = applyRecoveryOption(selectedItinerary, option);
     setSelectedItineraryState(recovered);
     setActiveDisruption(null);
-    setShowRecoveryOptions(false);
+    setShowRecoveryOptionsState(false);
     setRecoverySuccessMessage(
       `Recovery applied: ${option.description}. ${
         option.costDelta > 0
@@ -89,7 +139,8 @@ export default function App() {
           : 'No additional cost.'
       } Affected booking is now recovered.`
     );
-  }, [selectedItinerary]);
+    navigate('/app/dashboard');
+  }, [selectedItinerary, navigate]);
 
   const clearRecoverySuccess = useCallback(() => {
     setRecoverySuccessMessage(null);
@@ -97,16 +148,15 @@ export default function App() {
 
   const addImportedItinerary = useCallback((it: Itinerary) => {
     setItineraries((prev) => {
-      // Avoid duplicates if the same import is confirmed twice
       const deduped = prev.filter((p) => p.id !== it.id);
       return [...deduped, it];
     });
-    // Immediately select the newly imported itinerary and clear any active state
     setSelectedItineraryState(it);
     setActiveDisruption(null);
-    setShowRecoveryOptions(false);
+    setShowRecoveryOptionsState(false);
     setRecoverySuccessMessage(null);
-  }, []);
+    navigate('/app/dashboard');
+  }, [navigate]);
 
   return (
     <AppContext.Provider
@@ -122,42 +172,25 @@ export default function App() {
         applyRecovery,
         recoverySuccessMessage,
         clearRecoverySuccess,
-        showImportView,
-        setShowImportView,
         addImportedItinerary,
       }}
     >
-      {/* Landing page renders outside AppContext so it has no status pill */}
-      {showLanding ? (
-        <LandingPage onLaunch={() => setShowLanding(false)} />
-      ) : (
-      <div
-        className="min-h-screen font-body antialiased"
-        style={{
-          backgroundColor: 'var(--color-bg-base)',
-          color: 'var(--color-text-main)',
-        }}
-      >
-        <Header />
-        <main className="max-w-4xl mx-auto px-6 py-8">
-          {/* Import view replaces everything below the header */}
-          {showImportView ? (
-            <ImportView />
-          ) : (
-            <>
-              {!showRecoveryOptions && (
-                <ItineraryTabs itineraries={itineraries} />
-              )}
-              {showRecoveryOptions
-                ? <RecoveryView />
-                : <ItineraryView itinerary={selectedItinerary} />
-              }
-            </>
-          )}
-        </main>
-      </div>
-      )}
+      <Routes>
+        {/* Landing page */}
+        <Route
+          path="/"
+          element={<LandingPage onLaunch={() => navigate('/app/dashboard')} />}
+        />
+
+        {/* Main app shell at /app/* */}
+        <Route
+          path="/app/*"
+          element={<DashboardLayout itineraries={itineraries} />}
+        />
+
+        {/* Catch-all: redirect to landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </AppContext.Provider>
   );
 }
-

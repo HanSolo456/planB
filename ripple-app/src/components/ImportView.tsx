@@ -6,10 +6,12 @@
 // =============================================================================
 
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles, RotateCcw, Check, AlertTriangle, ChevronRight } from 'lucide-react';
 import type { Itinerary, Booking } from '../lib/types';
 import { extractItineraryFromText, IMPORT_PRESETS } from '../lib/importEngine';
 import { useAppState } from '../App';
+
 
 type ViewState = 'PASTE' | 'LOADING' | 'REVIEW' | 'ERROR';
 
@@ -177,7 +179,8 @@ function ReviewCard({ booking, index, onChange }: ReviewCardProps) {
 // MAIN COMPONENT
 // ---------------------------------------------------------------------------
 export default function ImportView() {
-  const { addImportedItinerary, setShowImportView } = useAppState();
+  const navigate = useNavigate();
+  const { addImportedItinerary } = useAppState();
 
   const [viewState, setViewState] = useState<ViewState>('PASTE');
   const [rawText, setRawText] = useState('');
@@ -222,8 +225,8 @@ export default function ImportView() {
   const handleConfirm = useCallback(() => {
     if (!extracted) return;
     addImportedItinerary(extracted);
-    setShowImportView(false);
-  }, [extracted, addImportedItinerary, setShowImportView]);
+    // addImportedItinerary already navigates to /app/dashboard via App state
+  }, [extracted, addImportedItinerary]);
 
   // ---- Reset to paste
   const handleStartOver = useCallback(() => {
@@ -245,7 +248,7 @@ export default function ImportView() {
       <div className="flex items-center gap-3">
         <button
           id="import-back-btn"
-          onClick={() => setShowImportView(false)}
+          onClick={() => navigate('/app/dashboard')}
           className="flex items-center gap-1.5 font-mono text-xs text-[#6B6760] hover:text-[#1C1B19] transition-colors duration-150"
           aria-label="Back to itineraries"
         >
