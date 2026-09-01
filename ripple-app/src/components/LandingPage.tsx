@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { Compass, ArrowRight, GitBranch, Zap, FileText, Plane, Hotel, Train } from 'lucide-react';
+import PlanBLogo from './PlanBLogo';
 
 interface Props {
   onLaunch: () => void;
@@ -23,34 +24,7 @@ function LandingHeader({ onLaunch }: { onLaunch: () => void }) {
     >
       <div className="max-w-7xl mx-auto px-8 md:px-16 py-3.5 flex items-center justify-between">
         {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center w-8 h-8 rounded-[2px]"
-            style={{ backgroundColor: 'var(--color-confirmed)', color: '#FFFFFF' }}
-          >
-            <Compass size={16} strokeWidth={2.2} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-display text-xl font-bold tracking-tight text-[#1C1B19] leading-none">
-                planB
-              </span>
-              <span
-                className="font-mono text-2xs uppercase tracking-widest px-1.5 py-0.5 rounded-[2px]"
-                style={{
-                  backgroundColor: 'var(--color-bg-surface-alt)',
-                  color: 'var(--color-text-muted)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                OPS MANIFEST
-              </span>
-            </div>
-            <p className="text-xs text-[#6B6760] mt-0.5">
-              Real-time Travel Disruption &amp; Re-accommodation Engine
-            </p>
-          </div>
-        </div>
+        <PlanBLogo size={34} />
 
         {/* Header CTA */}
         <button
