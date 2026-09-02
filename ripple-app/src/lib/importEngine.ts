@@ -57,31 +57,33 @@ RULES:
 2. ID slugs: "bkg-flight-1", "bkg-hotel-1", "bkg-transfer-1", "bkg-activity-1", etc.
    - If there are multiple hotels, use "bkg-hotel-1", "bkg-hotel-2", etc.
    - If there are multiple flights, use "bkg-flight-1", "bkg-flight-2", etc.
-3. ONE SEGMENT PER BOOKING BLOCK: If the source text has numbered blocks ("--- BOOKING 1 ---",
-   "--- SEGMENT 1 ---", "Booking 1:", etc.), each numbered block MUST produce exactly ONE entry
-   in the bookings array. NEVER merge two numbered blocks into one, even if they are at the same
-   property or with the same provider. A hotel with two stay periods = two separate hotel bookings.
-4. DEPENDENCY INFERENCE:
-   - Hotel check-in depends on the inbound flight or train if traveler goes directly.
-   - Airport or station transfer depends on the transport leg it serves.
-   - CRITICAL RULE FOR ACTIVITIES: The impact engine uses a booking's endTime (e.g. hotel checkout)
-     as the dependency reference — NOT startTime. Therefore:
-     * An activity that occurs DURING a hotel stay (i.e. between hotel check-in and check-out)
-       MUST depend on the INBOUND TRANSPORT LEG (flight or train that brought the traveler),
-       NOT on the hotel booking. Use a bufferMinutes value that covers overnight rest + travel
-       to the activity venue from arrival time. Example: if flight lands Nov 22 09:20 and
-       Pangong tour starts Nov 24 05:30, buffer = (34h 10m) = 2050 minutes.
-     * Only depend on the hotel if the activity starts AFTER hotel checkout.
-   - A hotel extension / second stay at same property depends on the Pangong-style day trip
-     that bridges the two stay periods, or on the previous hotel if no activity bridges them.
-   - First transport leg with no predecessor: dependsOn = [].
-5. BUFFER DEFAULTS (operational estimates — not facts extracted from text):
-   - International flight landing → next segment: 60 min
-   - Domestic flight landing → next segment: 45 min
-   - Train arrival → next segment: 20 min
-   - Hotel check-in → same-day activity: 30 min
-   - Hotel check-out → departure transport: 60 min
-   - No dependsOn → bufferMinutes = 0
+3. ONE SEGMENT PER BOOKING BLOCK: Each numbered block ("--- BOOKING 1 ---", "--- SEGMENT 1 ---")
+   MUST produce exactly ONE entry. NEVER merge two blocks even if same property/provider.
+4. DEPENDENCY CHAIN — follow the physical traveller sequence:
+   a. First transport leg (flight/train): dependsOn = [], bufferMinutes = 0.
+   b. Airport/station TRANSFER: dependsOn = [that flight/train ID], bufferMinutes = 45 (domestic) or 60 (international).
+   c. HOTEL with a transfer: dependsOn = [the transfer ID], bufferMinutes = 30 (check-in formalities).
+      HOTEL without a transfer: dependsOn = [the inbound flight/train ID], bufferMinutes = 45 or 60.
+   d. ACTIVITIES during a hotel stay (startTime is between hotel check-in and checkout):
+      — dependsOn = [the inbound FLIGHT or TRAIN id, NOT the hotel id].
+      — CRITICAL: The impact engine uses endTime (checkout) as reference for hotel deps.
+        Depending on the hotel would create a false huge negative shortfall for mid-stay activities.
+      — bufferMinutes = a small MINIMUM REQUIRED value: 60 min for same-day activities,
+        1440 min (24h) if the activity is the next calendar day (overnight rest needed).
+        DO NOT set bufferMinutes to the actual available time. It is the minimum required gap.
+   e. RETURN transport (flight/train/bus): dependsOn = [the hotel id], bufferMinutes = 60.
+   f. Hotel extension (second stay at same property): dependsOn = [the day-trip activity that bridges
+      the two stay periods, or the previous hotel id if nothing bridges them], bufferMinutes = 30.
+5. BUFFER SEMANTICS — CRITICAL: bufferMinutes is the MINIMUM REQUIRED gap, NOT the actual gap.
+   Never set bufferMinutes by calculating (childStartTime - parentEndTime). Use these standards:
+   - Domestic flight landing → next segment: 45 min required
+   - International flight landing → next segment: 60 min required
+   - Train arrival → next segment: 20 min required
+   - Transfer drop-off → hotel check-in: 30 min required
+   - Hotel check-in → next-day activity: 1440 min required (must arrive and sleep)
+   - Hotel check-in → same-day activity (later same day): 60 min required
+   - Hotel check-out → departure transport: 60 min required
+   - No dependsOn: bufferMinutes = 0
 6. CANCELLATION POLICY — infer conservatively:
    - "free cancellation" stated → { policy: "free", cutoffHours: 24 }
    - Penalty / partial refund mentioned → { policy: "partial-refund", cutoffHours: 24, refundPercent: 50 }
