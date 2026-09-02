@@ -162,41 +162,101 @@ export default function BookingCard({
         </div>
 
         {/* Row 3: Operational Timetable / Schedule (IBM Plex Mono) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-y border-[#EBE7DF] bg-[#FAF8F5] px-3.5 my-3 rounded-[2px] font-mono">
-          <div>
-            <span className="text-2xs text-[#969188] uppercase block">DEPARTURE</span>
-            <span className="text-xs font-bold text-[#1C1B19]">
-              {formatTimeOnly(booking.startTime)}
-            </span>
-            <span className="text-2xs text-[#6B6760] block">
-              {formatDateOnly(booking.startTime)}
-            </span>
-          </div>
+        {(() => {
+          // When this card is the disruption source and it's a delay,
+          // compute shifted times and show original crossed-out + new time.
+          const isDelaySource =
+            isDisruptionSource &&
+            activeDisruption?.disruptionType === 'delay' &&
+            (activeDisruption?.delayMinutes ?? 0) > 0;
+          const delay = activeDisruption?.delayMinutes ?? 0;
+          const newStart = isDelaySource ? shiftIso(booking.startTime, delay) : null;
+          const newEnd   = isDelaySource ? shiftIso(booking.endTime,   delay) : null;
 
-          <div>
-            <span className="text-2xs text-[#969188] uppercase block">ARRIVAL</span>
-            <span className="text-xs font-bold text-[#1C1B19]">
-              {formatTimeOnly(booking.endTime)}
-            </span>
-            <span className="text-2xs text-[#6B6760] block">
-              {formatDateOnly(booking.endTime)}
-            </span>
-          </div>
+          return (
+            <div
+              className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-y px-3.5 my-3 rounded-[2px] font-mono transition-colors duration-300"
+              style={{
+                backgroundColor: isDelaySource ? 'var(--color-disrupted-bg)' : '#FAF8F5',
+                borderColor:     isDelaySource ? 'var(--color-disrupted-border)' : '#EBE7DF',
+              }}
+            >
+              {/* DEPARTURE */}
+              <div>
+                <span className="text-2xs text-[#969188] uppercase block">DEPARTURE</span>
+                {isDelaySource && newStart ? (
+                  <>
+                    <span className="text-xs font-bold line-through text-[#969188]">
+                      {formatTimeOnly(booking.startTime)}
+                    </span>
+                    <span className="text-xs font-bold block" style={{ color: 'var(--color-disrupted)' }}>
+                      {formatTimeOnly(newStart)}
+                    </span>
+                    <span className="text-2xs block" style={{ color: 'var(--color-disrupted)' }}>
+                      {formatDateOnly(newStart)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-bold text-[#1C1B19]">{formatTimeOnly(booking.startTime)}</span>
+                    <span className="text-2xs text-[#6B6760] block">{formatDateOnly(booking.startTime)}</span>
+                  </>
+                )}
+              </div>
 
-          <div>
-            <span className="text-2xs text-[#969188] uppercase block">DURATION</span>
-            <span className="text-xs font-medium text-[#1C1B19]">
-              {getDurationLabel(booking.startTime, booking.endTime)}
-            </span>
-          </div>
+              {/* ARRIVAL */}
+              <div>
+                <span className="text-2xs text-[#969188] uppercase block">ARRIVAL</span>
+                {isDelaySource && newEnd ? (
+                  <>
+                    <span className="text-xs font-bold line-through text-[#969188]">
+                      {formatTimeOnly(booking.endTime)}
+                    </span>
+                    <span className="text-xs font-bold block" style={{ color: 'var(--color-disrupted)' }}>
+                      {formatTimeOnly(newEnd)}
+                    </span>
+                    <span className="text-2xs block" style={{ color: 'var(--color-disrupted)' }}>
+                      {formatDateOnly(newEnd)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-bold text-[#1C1B19]">{formatTimeOnly(booking.endTime)}</span>
+                    <span className="text-2xs text-[#6B6760] block">{formatDateOnly(booking.endTime)}</span>
+                  </>
+                )}
+              </div>
 
-          <div>
-            <span className="text-2xs text-[#969188] uppercase block">FARE / COST</span>
-            <span className="text-xs font-bold text-[#1C1B19]">
-              ₹{booking.cost.toLocaleString('en-IN')}
-            </span>
-          </div>
-        </div>
+              {/* DURATION */}
+              <div>
+                <span className="text-2xs text-[#969188] uppercase block">DURATION</span>
+                {isDelaySource && newStart && newEnd ? (
+                  <>
+                    <span className="text-xs font-medium line-through text-[#969188]">
+                      {getDurationLabel(booking.startTime, booking.endTime)}
+                    </span>
+                    <span className="text-xs font-medium block" style={{ color: 'var(--color-disrupted)' }}>
+                      {getDurationLabel(newStart, newEnd)}
+                      <span className="ml-1 text-2xs font-bold">(+{delay}m delay)</span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-xs font-medium text-[#1C1B19]">
+                    {getDurationLabel(booking.startTime, booking.endTime)}
+                  </span>
+                )}
+              </div>
+
+              {/* FARE */}
+              <div>
+                <span className="text-2xs text-[#969188] uppercase block">FARE / COST</span>
+                <span className="text-xs font-bold text-[#1C1B19]">
+                  ₹{booking.cost.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Row 4: Disruption Cascade Alert (if impacted) */}
         {impactedBooking && (
@@ -352,4 +412,18 @@ function getDurationLabel(start: string, end: string): string {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+}
+
+/** Shift an ISO 8601 string by delayMinutes, preserving the original offset. */
+function shiftIso(iso: string, delayMinutes: number): string {
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() + delayMinutes);
+  // Re-attach original offset string so display is consistent
+  const offsetMatch = iso.match(/([+-]\d{2}:\d{2}|Z)$/);
+  const offset = offsetMatch ? offsetMatch[1] : '+05:30';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:00${offset}`
+  );
 }
