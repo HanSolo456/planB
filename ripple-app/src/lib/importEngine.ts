@@ -55,26 +55,41 @@ interface Itinerary {
 RULES:
 1. Extract EVERY segment: flights, trains, hotels, airport transfers, activities, events.
 2. ID slugs: "bkg-flight-1", "bkg-hotel-1", "bkg-transfer-1", "bkg-activity-1", etc.
-3. DEPENDENCY INFERENCE:
+   - If there are multiple hotels, use "bkg-hotel-1", "bkg-hotel-2", etc.
+   - If there are multiple flights, use "bkg-flight-1", "bkg-flight-2", etc.
+3. ONE SEGMENT PER BOOKING BLOCK: If the source text has numbered blocks ("--- BOOKING 1 ---",
+   "--- SEGMENT 1 ---", "Booking 1:", etc.), each numbered block MUST produce exactly ONE entry
+   in the bookings array. NEVER merge two numbered blocks into one, even if they are at the same
+   property or with the same provider. A hotel with two stay periods = two separate hotel bookings.
+4. DEPENDENCY INFERENCE:
    - Hotel check-in depends on the inbound flight or train if traveler goes directly.
    - Airport or station transfer depends on the transport leg it serves.
-   - Activity depends on hotel if it starts the same day or next morning.
+   - CRITICAL RULE FOR ACTIVITIES: The impact engine uses a booking's endTime (e.g. hotel checkout)
+     as the dependency reference — NOT startTime. Therefore:
+     * An activity that occurs DURING a hotel stay (i.e. between hotel check-in and check-out)
+       MUST depend on the INBOUND TRANSPORT LEG (flight or train that brought the traveler),
+       NOT on the hotel booking. Use a bufferMinutes value that covers overnight rest + travel
+       to the activity venue from arrival time. Example: if flight lands Nov 22 09:20 and
+       Pangong tour starts Nov 24 05:30, buffer = (34h 10m) = 2050 minutes.
+     * Only depend on the hotel if the activity starts AFTER hotel checkout.
+   - A hotel extension / second stay at same property depends on the Pangong-style day trip
+     that bridges the two stay periods, or on the previous hotel if no activity bridges them.
    - First transport leg with no predecessor: dependsOn = [].
-4. BUFFER DEFAULTS (operational estimates — not facts extracted from text):
+5. BUFFER DEFAULTS (operational estimates — not facts extracted from text):
    - International flight landing → next segment: 60 min
    - Domestic flight landing → next segment: 45 min
    - Train arrival → next segment: 20 min
    - Hotel check-in → same-day activity: 30 min
    - Hotel check-out → departure transport: 60 min
    - No dependsOn → bufferMinutes = 0
-5. CANCELLATION POLICY — infer conservatively:
+6. CANCELLATION POLICY — infer conservatively:
    - "free cancellation" stated → { policy: "free", cutoffHours: 24 }
    - Penalty / partial refund mentioned → { policy: "partial-refund", cutoffHours: 24, refundPercent: 50 }
    - Unclear or not stated → { policy: "non-refundable" }
-6. COST — convert to INR if needed (use: USD×84, EUR×92, GBP×107). Use 0 if unknown.
-7. TIMEZONE — use destination local offset. Default to +05:30 (IST) if uncertain.
-8. Sort bookings array by startTime ascending.
-9. Output ONLY the JSON object. No markdown fences, no explanation, no extra text.`;
+7. COST — convert to INR if needed (use: USD×84, EUR×92, GBP×107). Use 0 if unknown.
+8. TIMEZONE — use destination local offset. Default to +05:30 (IST) if uncertain.
+9. Sort bookings array by startTime ascending.
+10. Output ONLY the JSON object. No markdown fences, no explanation, no extra text.`;
 
 // ---------------------------------------------------------------------------
 // GROQ API CALL (OpenAI-compatible endpoint)
@@ -106,6 +121,7 @@ async function callGroq(userText: string): Promise<string> {
       ],
       response_format: { type: 'json_object' },
       temperature: 0.1,
+      max_tokens: 4096,
     }),
   });
 
@@ -243,31 +259,154 @@ export interface ImportPreset {
 
 export const IMPORT_PRESETS: ImportPreset[] = [
   {
-    label: 'Flight + Hotel',
-    description: 'Domestic flight with hotel booking',
-    text: `Subject: Your IndiGo Booking Confirmation — PNR: XY1234
-Dear Priya Sharma,
+    label: 'Goa Trip — Saumitra Matta',
+    description: 'Flight + transfer + resort + yacht cruise + return flight (5 segments)',
+    text: `================================================================================
+CONFIRMATION & E-TICKET RECEIPT — TRIP TO GOA (GOI)
+Booking Reference / PNR: 6E-VK893N
+Passenger Name: Saumitra Matta
+Date of Issue: 15 October 2025
+================================================================================
 
-FLIGHT: 6E-2041 | Delhi (DEL) → Mumbai (BOM)
-Date: 12 March 2025 | Dep: 07:15 | Arr: 09:25
-Seat: 18A | Economy | INR 4,850 | Non-refundable
+--- SEGMENT 1: OUTBOUND FLIGHT ---
+Airline: IndiGo Airlines
+Flight: 6E-5124 (Airbus A321neo)
+Route: New Delhi (DEL) Terminal 3 → Goa Dabolim (GOI) Terminal 1
+Departure: 14 November 2025 at 06:15 IST
+Arrival: 14 November 2025 at 08:50 IST
+Duration: 2h 35m | Non-Stop
+Class: Economy Saver (Seat 14F)
+Baggage: 15 kg check-in + 7 kg cabin
+Fare: ₹5,450 (Taxes & Fees included)
+Cancellation Policy: Partial refund (₹2,500 airline fee applies if cancelled 24h prior)
 
-HOTEL: The Oberoi Mumbai
-Check-in: 12 March 2025, 2:00 PM | Check-out: 14 March 2025, 12:00 PM
-Room: Deluxe King | INR 22,000 per night | Free cancellation until 10 March`,
+--- SEGMENT 2: PRE-BOOKED AIRPORT TRANSFER ---
+Provider: Goa Miles Executive Transfers
+Booking ID: GM-TX-88219
+Pickup Location: Dabolim Airport (GOI) Terminal 1 Arrival Gate 4
+Drop-off Location: W Goa, Vagator Beach, Goa
+Pickup Time: 14 November 2025 at 09:30 IST
+Estimated Drop-off: 14 November 2025 at 10:45 IST
+Vehicle: Toyota Innova Crysta (Air Conditioned)
+Total Cost: ₹1,850 (Prepaid)
+Cancellation Policy: Free cancellation up to 6 hours before pickup
+
+--- SEGMENT 3: RESORT & HOTEL RESERVATION ---
+Property: W Goa Resort & Spa
+Confirmation No: MAR-9043210
+Address: Vagator Beach, Bardez, Goa 403509
+Check-in: 14 November 2025 (Check-in from 14:00 IST)
+Check-out: 17 November 2025 (Check-out by 11:00 IST)
+Nights: 3 Nights
+Room Type: Spectacular Ocean View King Suite (Breakfast included)
+Guest: Saumitra Matta (1 Adult)
+Total Room Tariff: ₹48,600 (₹16,200/night + taxes)
+Cancellation Policy: Free cancellation until 12 November 2025, 23:59 IST (Full refund)
+
+--- SEGMENT 4: SCHEDULED EXCURSION / ACTIVITY ---
+Operator: Konkan Coastal Adventures
+Activity: Private Sunset Yacht Cruise & Dolphin Sighting
+Booking ID: KCA-YACHT-410
+Location: Chapora River Jetty, Vagator, Goa
+Date & Time: 15 November 2025 | 16:30 IST – 19:00 IST
+Pass: 1 Guest Private Charter
+Amount: ₹7,500
+Cancellation Policy: 50% refund if cancelled 24 hours prior; non-refundable within 24 hours
+
+--- SEGMENT 5: RETURN FLIGHT ---
+Airline: Air India
+Flight: AI-842
+Route: Goa Dabolim (GOI) Terminal 1 → New Delhi (DEL) Terminal 3
+Departure: 17 November 2025 at 18:30 IST
+Arrival: 17 November 2025 at 21:10 IST
+Duration: 2h 40m | Non-Stop
+Class: Economy Flex (Seat 12C)
+Fare: ₹6,920
+Cancellation Policy: Free cancellation up to 24 hours before scheduled departure
+
+================================================================================
+Total Paid: ₹70,320 INR | Payment Mode: Credit Card (HDFC ending in 4092)
+================================================================================`,
   },
   {
-    label: 'Train + Activities',
-    description: 'IRCTC train with desert safari and heritage walk',
-    text: `IRCTC Booking Confirmation — PNR: 4589201345
-Train: 12956 Jaipur Superfast | Mumbai Central → Jaipur
-18 April 2025 | Dep: 18:50 | Arr: 10:30 next day | 3A Class | INR 1,245
+    label: 'Ladakh Expedition — Rohan Kapoor',
+    description: 'Flight + hotel + Pangong Lake drive + monastery tour + return flight (6 segments)',
+    text: `================================================================================
+MULTI-BOOKING CONFIRMATION SUMMARY — LADAKH TRIP (IXL)
+Master Booking ID: MXB-2025-LAD-00712
+Lead Passenger: Rohan Kapoor
+Date of Issue: 02 November 2025
+================================================================================
 
-Activity: Camel Safari, Sam Sand Dunes
-19 April 2025, 4:00 PM – 8:00 PM | Rajasthan Desert Trails | INR 2,800
-50% refund if cancelled 48h before
+--- BOOKING 1: OUTBOUND FLIGHT ---
+Carrier: Air India Express
+Flight: IX-537
+Route: Bengaluru (BLR) Terminal 2 → Leh Kushok Bakula Rimpochhe Airport (IXL)
+Departure: 22 November 2025 at 05:45 IST
+Arrival: 22 November 2025 at 09:20 IST (via 1 stop Delhi — no plane change)
+Class: Economy | Seat 8B
+Fare: ₹9,840 (inclusive of taxes)
+Baggage: 15 kg check-in + 7 kg cabin
+Cancellation Policy: ₹3,500 fee if cancelled within 48 hours of departure
 
-Heritage Walk — Jaipur Old City
-20 April 2025, 8:00 AM – 11:00 AM | Rajputana Tours | INR 900 | Non-refundable`,
+--- BOOKING 2: HOTEL CHECK-IN (NIGHT 1 & 2 — ACCLIMATIZATION DAYS) ---
+Property: The Grand Dragon Ladakh
+Confirmation: GDL-NOV-5591
+Address: Old Road, Karzoo, Leh, Ladakh 194101
+Check-in: 22 November 2025 at 11:00 IST
+Check-out: 24 November 2025 at 10:00 IST
+Room: Deluxe Room with Mountain View (2 Nights)
+Total: ₹12,400 (₹6,200/night, breakfast included)
+NOTE: Guest must rest on arrival day — high altitude (3,500 m). No strenuous activity for first 24 hours.
+Cancellation: Free cancellation until 20 November 2025
+
+--- BOOKING 3: DAY EXCURSION — PANGONG LAKE (FIXED DATE) ---
+Operator: Leh Adventure Tours
+Tour: Pangong Tso Full-Day Private Drive
+Booking Ref: LAT-PANG-991
+Pickup from Hotel: 24 November 2025 at 05:30 IST
+Return to Hotel: 24 November 2025 at 20:00 IST
+Route: Leh → Chang La Pass (5,360 m) → Pangong Lake → Return
+Vehicle: Toyota Land Cruiser (4WD, heated)
+Inclusions: Packed lunch, Photography stops, Inner Line Permit (ILP)
+Price: ₹8,500 per vehicle (1 pax)
+Cancellation: 50% refund if cancelled 48h prior. Non-refundable within 48 hours.
+⚠️ Weather Advisory: Route via Chang La subject to sudden snowfall. Operator may reschedule.
+
+--- BOOKING 4: HOTEL CHECK-IN (NIGHT 3 & 4) ---
+Property: The Grand Dragon Ladakh (continued stay)
+Confirmation: GDL-NOV-5591-EXT
+Check-in: 24 November 2025 at 21:00 IST (post Pangong return)
+Check-out: 26 November 2025 at 10:00 IST
+Room: Same Deluxe Room (2 Nights)
+Total: ₹12,400
+Cancellation: Non-refundable (extension booking)
+
+--- BOOKING 5: HALF-DAY GUIDED TOUR ---
+Operator: Ladakh Heritage Walks
+Tour: Thiksey Monastery & Shey Palace Private Tour
+Booking ID: LHW-MONK-314
+Date: 25 November 2025 | 08:00 IST – 13:00 IST
+Meeting Point: Hotel Lobby
+Guide: English-speaking certified heritage guide
+Price: ₹3,200
+Cancellation: Full refund if cancelled 24h prior
+
+--- BOOKING 6: RETURN FLIGHT ---
+Carrier: IndiGo
+Flight: 6E-6417
+Route: Leh (IXL) → Bengaluru (BLR) Terminal 2 (via Delhi, no plane change)
+Departure: 26 November 2025 at 11:30 IST
+Arrival: 26 November 2025 at 17:45 IST
+Class: Economy Saver | Seat 22F
+Fare: ₹8,290
+Baggage: 15 kg check-in + 7 kg cabin
+Cancellation Policy: Partial refund — ₹3,000 fee applies if cancelled within 24h
+
+================================================================================
+Total Trip Value: ₹54,630 INR
+Payment: SBI Credit Card ending 7731
+Emergency Helpline: +91 1800-103-9999 | Email: bookings@mountainxpeditions.com
+================================================================================`,
   },
 ];

@@ -356,14 +356,14 @@ export default function RecoveryView() {
 
   const sourceBooking = useMemo(
     () =>
-      activeDisruption
+      activeDisruption && selectedItinerary
         ? selectedItinerary.bookings.find((b) => b.id === activeDisruption.bookingId)
         : null,
     [selectedItinerary, activeDisruption]
   );
 
   const options = useMemo<ScoredRecoveryOption[]>(() => {
-    if (!activeDisruption) return [];
+    if (!activeDisruption || !selectedItinerary) return [];
     try {
       return generateRecoveryOptions(selectedItinerary, activeDisruption);
     } catch (err) {
@@ -375,7 +375,7 @@ export default function RecoveryView() {
   // Fire AI explanations in parallel whenever options are computed.
   // Cache in reasoningEngine prevents redundant calls on back/forward nav.
   useEffect(() => {
-    if (!options.length || !activeDisruption) return;
+    if (!options.length || !activeDisruption || !selectedItinerary) return;
     // Pre-fill all slots with null (triggers skeleton on each card)
     setExplanations(Object.fromEntries(options.map((o) => [o.id, null])));
     // Resolve each explanation independently so fast responses render immediately

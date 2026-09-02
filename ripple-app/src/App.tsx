@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, createContext, useContext } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { itineraryA, itineraryB } from './lib/seedData';
 import type { Itinerary, Disruption, ImpactedBooking, ScoredRecoveryOption } from './lib/types';
 import { detectImpact } from './lib/impactEngine';
 import { applyRecoveryOption } from './lib/recoveryEngine';
@@ -10,12 +9,13 @@ import RecoveryView from './components/RecoveryView';
 import ItineraryTabs from './components/ItineraryTabs';
 import ImportView from './components/ImportView';
 import LandingPage from './components/LandingPage';
+import EmptyDashboard from './components/EmptyDashboard';
 
 // ---------------------------------------------------------------------------
 // App-level state shape
 // ---------------------------------------------------------------------------
 export interface AppState {
-  selectedItinerary: Itinerary;
+  selectedItinerary: Itinerary | null;
   setSelectedItinerary: (it: Itinerary) => void;
   activeDisruption: Disruption | null;
   setActiveDisruption: (d: Disruption | null) => void;
@@ -38,11 +38,9 @@ export function useAppState(): AppState {
   return ctx;
 }
 
-// Seed itineraries — imported trips get appended at runtime
-const SEED_ITINERARIES: Itinerary[] = [itineraryA, itineraryB];
-
 // ---------------------------------------------------------------------------
 // Dashboard layout — shared shell for /app/dashboard, /app/import, /app/recovery
+// Matches the exact horizontal coverage of the landing/home page (max-w-7xl px-8 md:px-16)
 // ---------------------------------------------------------------------------
 function DashboardLayout({ itineraries }: { itineraries: Itinerary[] }) {
   const { selectedItinerary, showRecoveryOptions } = useAppState();
@@ -56,17 +54,21 @@ function DashboardLayout({ itineraries }: { itineraries: Itinerary[] }) {
       }}
     >
       <Header />
-      <main className="max-w-4xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-8 md:px-16 py-8">
         <Routes>
           <Route
             path="dashboard"
             element={
-              <>
-                {!showRecoveryOptions && (
-                  <ItineraryTabs itineraries={itineraries} />
-                )}
-                <ItineraryView itinerary={selectedItinerary} />
-              </>
+              selectedItinerary === null ? (
+                <EmptyDashboard />
+              ) : (
+                <>
+                  {!showRecoveryOptions && (
+                    <ItineraryTabs itineraries={itineraries} />
+                  )}
+                  <ItineraryView itinerary={selectedItinerary} />
+                </>
+              )
             }
           />
           <Route path="import" element={<ImportView />} />
@@ -86,14 +88,15 @@ function DashboardLayout({ itineraries }: { itineraries: Itinerary[] }) {
 export default function App() {
   const navigate = useNavigate();
 
-  const [itineraries, setItineraries] = useState<Itinerary[]>(SEED_ITINERARIES);
-  const [selectedItinerary, setSelectedItineraryState] = useState<Itinerary>(itineraryA);
+  // No seed itineraries — starts completely empty
+  const [itineraries, setItineraries] = useState<Itinerary[]>([]);
+  const [selectedItinerary, setSelectedItineraryState] = useState<Itinerary | null>(null);
   const [activeDisruption, setActiveDisruption] = useState<Disruption | null>(null);
   const [showRecoveryOptions, setShowRecoveryOptionsState] = useState<boolean>(false);
   const [recoverySuccessMessage, setRecoverySuccessMessage] = useState<string | null>(null);
 
   const impactedBookings = useMemo<ImpactedBooking[]>(() => {
-    if (!activeDisruption) return [];
+    if (!activeDisruption || !selectedItinerary) return [];
     try {
       return detectImpact(selectedItinerary, activeDisruption);
     } catch (err) {
@@ -126,15 +129,15 @@ export default function App() {
   }, [navigate]);
 
   const applyRecovery = useCallback((option: ScoredRecoveryOption) => {
+    if (!selectedItinerary) return;
     const recovered = applyRecoveryOption(selectedItinerary, option);
     setSelectedItineraryState(recovered);
     setActiveDisruption(null);
     setShowRecoveryOptionsState(false);
     setRecoverySuccessMessage(
-      `Recovery applied: ${option.description}. ${
-        option.costDelta > 0
-          ? `₹${option.costDelta.toLocaleString('en-IN')} extra cost.`
-          : option.costDelta < 0
+      `Recovery applied: ${option.description}. ${option.costDelta > 0
+        ? `₹${option.costDelta.toLocaleString('en-IN')} extra cost.`
+        : option.costDelta < 0
           ? `₹${Math.abs(option.costDelta).toLocaleString('en-IN')} saved.`
           : 'No additional cost.'
       } Affected booking is now recovered.`

@@ -24,7 +24,7 @@ export default function ItineraryTabs({ itineraries }: Props) {
 
       <div className="grid grid-cols-2 gap-3">
         {itineraries.map((it) => {
-          const isSelected = it.id === selectedItinerary.id;
+          const isSelected = it.id === selectedItinerary?.id;
           return (
             <button
               key={it.id}

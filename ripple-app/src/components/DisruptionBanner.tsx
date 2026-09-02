@@ -17,6 +17,7 @@ export default function DisruptionBanner() {
   } = useAppState();
 
   if (!activeDisruption) return null;
+  if (!selectedItinerary) return null;
 
   const sourceBooking = selectedItinerary.bookings.find(
     (b) => b.id === activeDisruption.bookingId

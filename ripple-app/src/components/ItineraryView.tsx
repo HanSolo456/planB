@@ -229,7 +229,15 @@ export default function ItineraryView({ itinerary }: Props) {
                     </span>
                     {booking.dependsOn.length > 0 && (
                       <span>
-                        · DEPENDS ON: {booking.dependsOn.map((depId) => bookingMap.get(depId)?.title.split(' ')[0] ?? depId).join(', ')}
+                        · DEPENDS ON: {booking.dependsOn.map((depId) => {
+                          const dep = bookingMap.get(depId);
+                          if (!dep) return depId;
+                          // Show type + first meaningful token (flight number, hotel name, etc.)
+                          const shortTitle = dep.title.length > 24
+                            ? dep.title.slice(0, 24) + '…'
+                            : dep.title;
+                          return `${dep.type.toUpperCase()}: ${shortTitle}`;
+                        }).join(', ')}
                       </span>
                     )}
                   </div>
