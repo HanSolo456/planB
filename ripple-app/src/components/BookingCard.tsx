@@ -163,36 +163,63 @@ export default function BookingCard({
 
         {/* Row 3: Operational Timetable / Schedule (IBM Plex Mono) */}
         {(() => {
-          // When this card is the disruption source and it's a delay,
-          // compute shifted times and show original crossed-out + new time.
+          // --- SOURCE BOOKING: direct delay applied ---
           const isDelaySource =
             isDisruptionSource &&
             activeDisruption?.disruptionType === 'delay' &&
             (activeDisruption?.delayMinutes ?? 0) > 0;
-          const delay = activeDisruption?.delayMinutes ?? 0;
-          const newStart = isDelaySource ? shiftIso(booking.startTime, delay) : null;
-          const newEnd   = isDelaySource ? shiftIso(booking.endTime,   delay) : null;
+
+          // --- IMPACTED BOOKING: cascade delay = bufferShortfallMinutes ---
+          // The impactEngine computes effectiveStart = latestDepEnd + bufferMinutes
+          // so shortfall = effectiveStart - originalStart = how many min late this runs.
+          const cascadeDelay =
+            !isDisruptionSource &&
+            impactedBooking &&
+            activeDisruption?.disruptionType === 'delay' &&
+            impactedBooking.bufferShortfallMinutes > 0
+              ? impactedBooking.bufferShortfallMinutes
+              : 0;
+
+          const effectiveDelay = isDelaySource
+            ? (activeDisruption?.delayMinutes ?? 0)
+            : cascadeDelay;
+
+          const hasDisplayedDelay = effectiveDelay > 0;
+          const newStart = hasDisplayedDelay ? shiftIso(booking.startTime, effectiveDelay) : null;
+          const newEnd   = hasDisplayedDelay ? shiftIso(booking.endTime,   effectiveDelay) : null;
+
+          // Timetable bg: red for source/broken, amber for cascade at-risk, plain otherwise
+          const timetableBg = isDelaySource || isBroken
+            ? 'var(--color-disrupted-bg)'
+            : cascadeDelay > 0
+            ? 'var(--color-at-risk-bg)'
+            : '#FAF8F5';
+          const timetableBorder = isDelaySource || isBroken
+            ? 'var(--color-disrupted-border)'
+            : cascadeDelay > 0
+            ? 'var(--color-at-risk-border)'
+            : '#EBE7DF';
+          const newTimeColor = isDelaySource || isBroken
+            ? 'var(--color-disrupted)'
+            : 'var(--color-at-risk)';
 
           return (
             <div
               className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-y px-3.5 my-3 rounded-[2px] font-mono transition-colors duration-300"
-              style={{
-                backgroundColor: isDelaySource ? 'var(--color-disrupted-bg)' : '#FAF8F5',
-                borderColor:     isDelaySource ? 'var(--color-disrupted-border)' : '#EBE7DF',
-              }}
+              style={{ backgroundColor: timetableBg, borderColor: timetableBorder }}
             >
               {/* DEPARTURE */}
               <div>
                 <span className="text-2xs text-[#969188] uppercase block">DEPARTURE</span>
-                {isDelaySource && newStart ? (
+                {hasDisplayedDelay && newStart ? (
                   <>
                     <span className="text-xs font-bold line-through text-[#969188]">
                       {formatTimeOnly(booking.startTime)}
                     </span>
-                    <span className="text-xs font-bold block" style={{ color: 'var(--color-disrupted)' }}>
+                    <span className="text-xs font-bold block" style={{ color: newTimeColor }}>
                       {formatTimeOnly(newStart)}
                     </span>
-                    <span className="text-2xs block" style={{ color: 'var(--color-disrupted)' }}>
+                    <span className="text-2xs block" style={{ color: newTimeColor }}>
                       {formatDateOnly(newStart)}
                     </span>
                   </>
@@ -207,15 +234,15 @@ export default function BookingCard({
               {/* ARRIVAL */}
               <div>
                 <span className="text-2xs text-[#969188] uppercase block">ARRIVAL</span>
-                {isDelaySource && newEnd ? (
+                {hasDisplayedDelay && newEnd ? (
                   <>
                     <span className="text-xs font-bold line-through text-[#969188]">
                       {formatTimeOnly(booking.endTime)}
                     </span>
-                    <span className="text-xs font-bold block" style={{ color: 'var(--color-disrupted)' }}>
+                    <span className="text-xs font-bold block" style={{ color: newTimeColor }}>
                       {formatTimeOnly(newEnd)}
                     </span>
-                    <span className="text-2xs block" style={{ color: 'var(--color-disrupted)' }}>
+                    <span className="text-2xs block" style={{ color: newTimeColor }}>
                       {formatDateOnly(newEnd)}
                     </span>
                   </>
@@ -230,14 +257,14 @@ export default function BookingCard({
               {/* DURATION */}
               <div>
                 <span className="text-2xs text-[#969188] uppercase block">DURATION</span>
-                {isDelaySource && newStart && newEnd ? (
+                {hasDisplayedDelay && newStart && newEnd ? (
                   <>
                     <span className="text-xs font-medium line-through text-[#969188]">
                       {getDurationLabel(booking.startTime, booking.endTime)}
                     </span>
-                    <span className="text-xs font-medium block" style={{ color: 'var(--color-disrupted)' }}>
+                    <span className="text-xs font-medium block" style={{ color: newTimeColor }}>
                       {getDurationLabel(newStart, newEnd)}
-                      <span className="ml-1 text-2xs font-bold">(+{delay}m delay)</span>
+                      <span className="ml-1 text-2xs font-bold">(+{effectiveDelay}m)</span>
                     </span>
                   </>
                 ) : (
@@ -257,6 +284,7 @@ export default function BookingCard({
             </div>
           );
         })()}
+
 
         {/* Row 4: Disruption Cascade Alert (if impacted) */}
         {impactedBooking && (
