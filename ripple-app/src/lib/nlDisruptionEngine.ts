@@ -108,7 +108,7 @@ async function callGroqForDisruption(
       ],
       response_format: { type: 'json_object' },
       temperature: 0.1,
-      max_tokens: 300,
+      max_tokens: 1024,
     }),
   });
 

@@ -96,7 +96,7 @@ async function callGroqForReasoning(
         { role: 'user',   content: userMessage },
       ],
       temperature: 0.4,  // slightly higher than extraction — allows natural phrasing
-      max_tokens: 120,   // 1-2 sentences never needs more
+      max_tokens: 500,   // ample room for complete natural language reasoning
     }),
   });
 
