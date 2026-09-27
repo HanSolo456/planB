@@ -16,7 +16,6 @@ import { useWikipediaImage } from '../lib/useWikipediaImage';
 import { parseDisruptionFromText } from '../lib/nlDisruptionEngine';
 import { createPortal } from 'react-dom';
 import { createShareLink } from '../lib/cloudTripStorage';
-import QRCode from 'qrcode';
 import {
   ShieldCheck,
   Info,
@@ -260,11 +259,12 @@ export default function ItineraryView({ itinerary }: Props) {
   const [shareTab, setShareTab] = useState<'link' | 'qr'>('link');
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareCode, setShareCode] = useState<string | null>(null);
+  const [shareMode, setShareMode] = useState<'cloud' | 'local' | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [shareCodeCopied, setShareCodeCopied] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [shareAllowEdit, setShareAllowEdit] = useState(false);
 
   // ---------------------------------------------------------------------------
@@ -418,41 +418,47 @@ export default function ItineraryView({ itinerary }: Props) {
   // In the user's mockup, score is 75/100 and status is ON TRACK
   const healthScore = hasBroken ? 45 : hasDisruptions ? 60 : tripRisk.overallScore >= 70 ? 75 : tripRisk.overallScore;
 
-  // Handle Share Generation
-  const handleShare = useCallback(async () => {
-    setShareModal(true);
-    if (shareUrl) return;
+  // Core share-link generation — accepts an explicit allowEdit flag so it can
+  // be called both on first open and when the toggle flips mid-session.
+  const generateShareLink = useCallback(async (allowEdit: boolean) => {
     setShareLoading(true);
     setShareError(null);
     try {
-      const result = await createShareLink(itinerary, shareAllowEdit);
+      const result = await createShareLink(itinerary, allowEdit);
       setShareUrl(result.url);
       setShareCode(result.shareCode);
-      QRCode.toDataURL(result.url, {
-        width: 260,
-        margin: 2,
-        color: { dark: '#17212B', light: '#FFFFFF' },
-        errorCorrectionLevel: 'L',
-      })
-        .then((url) => setQrDataUrl(url))
-        .catch((err) => console.warn('[ItineraryView] Pre-generating QR failed:', err));
+      setShareMode(result.mode);
+
+      // Generate QR for all modes — api.qrserver.com handles the encoding,
+      // works for both short cloud tokens and longer local compressed URLs.
+      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(result.url)}`;
+      setQrImageUrl(qr);
     } catch (err) {
       setShareError('Could not generate share link. Please try again.');
       console.error('[ItineraryView] createShareLink error:', err);
     } finally {
       setShareLoading(false);
     }
-  }, [itinerary, shareUrl, shareAllowEdit]);
+  }, [itinerary]);
 
-  // When the allow-edit toggle flips AFTER a link was generated, regenerate it
+  // Handle Share Generation
+  const handleShare = useCallback(async () => {
+    setShareModal(true);
+    if (shareUrl) return;
+    await generateShareLink(shareAllowEdit);
+  }, [shareUrl, shareAllowEdit, generateShareLink]);
+
+  // When the allow-edit toggle flips, reset and immediately regenerate so
+  // the copy link and QR never go blank.
   const handleToggleAllowEdit = useCallback((next: boolean) => {
     setShareAllowEdit(next);
-    // Reset cached link so it regenerates with the new flag on next open/request
     setShareUrl(null);
     setShareCode(null);
-    setQrDataUrl(null);
+    setShareMode(null);
+    setQrImageUrl(null);
     setShareError(null);
-  }, []);
+    generateShareLink(next);
+  }, [generateShareLink]);
 
   // Handle Natural Language Disruption Submit
   const handleQuickSubmit = async (queryText?: string) => {
@@ -1352,12 +1358,15 @@ export default function ItineraryView({ itinerary }: Props) {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center space-y-3">
-                    {qrDataUrl && (
+                    {qrImageUrl ? (
                       <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-xs">
-                        <img src={qrDataUrl} alt="Trip QR Code" className="w-48 h-48" />
+                        <img src={qrImageUrl} alt="Trip QR Code" className="w-52 h-52" />
+                      </div>
+                    ) : (
+                      <div className="w-52 h-52 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center">
+                        <span className="text-xs text-gray-400">Generating…</span>
                       </div>
                     )}
-                    {/* Show code below QR too */}
                     {shareCode && (
                       <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl">
                         <span className="text-2xs text-gray-400 font-semibold uppercase tracking-wide">Code</span>

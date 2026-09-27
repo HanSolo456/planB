@@ -106,8 +106,12 @@ function LandingHeader({ onLaunch, onOpenAuth, currentUser, onSignOut, scrolled 
           : '0 6px 20px -4px rgba(28, 27, 25, 0.04), 0 2px 6px -1px rgba(28, 27, 25, 0.02)',
       }}
     >
-      <div className="px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 flex items-center justify-between">
-        <PlanBLogo size={34} />
+      <div className="px-3 sm:px-6 md:px-8 py-2 sm:py-3 flex items-center justify-between gap-2">
+        {/* Show only logomark on small screens to avoid crowding the nav buttons */}
+        <div className="flex-shrink-0">
+          <PlanBLogo size={30} className="hidden sm:flex" />
+          <PlanBLogo size={28} showWordmark={false} className="flex sm:hidden" />
+        </div>
 
         {/* Nav links — hidden on mobile */}
         <nav className="hidden md:flex items-center gap-6">
@@ -129,15 +133,15 @@ function LandingHeader({ onLaunch, onOpenAuth, currentUser, onSignOut, scrolled 
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
           {currentUser ? (
             <>
               <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full font-mono text-xs border"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full font-mono text-xs border"
                 style={{ backgroundColor: 'rgba(242, 240, 235, 0.85)', borderColor: 'var(--color-border)' }}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-[#102A43] lp-dot-pulse" />
-                <span className="font-semibold text-[#17212B] max-w-[95px] sm:max-w-[180px] truncate">
+                <span className="font-semibold text-[#17212B] max-w-[72px] sm:max-w-[180px] truncate">
                   {userName}
                 </span>
                 {onSignOut && (
@@ -152,7 +156,7 @@ function LandingHeader({ onLaunch, onOpenAuth, currentUser, onSignOut, scrolled 
               <button
                 id="landing-header-cta"
                 onClick={onLaunch}
-                className="font-mono text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-full transition-colors duration-150 cursor-pointer"
+                className="font-mono text-xs font-semibold uppercase tracking-wider px-3 sm:px-4 py-1.5 sm:py-2 rounded-full transition-colors duration-150 cursor-pointer whitespace-nowrap"
                 style={{ backgroundColor: 'var(--color-confirmed)', color: '#FFFFFF' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#0A1E30')}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-confirmed)')}
@@ -166,7 +170,7 @@ function LandingHeader({ onLaunch, onOpenAuth, currentUser, onSignOut, scrolled 
                 <button
                   id="landing-header-signin-btn"
                   onClick={() => onOpenAuth()}
-                  className="font-mono text-xs font-semibold uppercase tracking-wider px-3.5 py-2 rounded-full transition-colors duration-150 cursor-pointer border"
+                  className="font-mono text-xs font-semibold uppercase tracking-wider px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-full transition-colors duration-150 cursor-pointer border whitespace-nowrap"
                   style={{ borderColor: 'var(--color-border)', backgroundColor: 'transparent', color: 'var(--color-text-main)' }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-confirmed)';
@@ -183,7 +187,7 @@ function LandingHeader({ onLaunch, onOpenAuth, currentUser, onSignOut, scrolled 
               <button
                 id="landing-header-cta"
                 onClick={onLaunch}
-                className="font-mono text-xs font-semibold uppercase tracking-wider px-4 py-2 rounded-full transition-colors duration-150 cursor-pointer"
+                className="font-mono text-xs font-semibold uppercase tracking-wider px-3 sm:px-4 py-1.5 sm:py-2 rounded-full transition-colors duration-150 cursor-pointer whitespace-nowrap"
                 style={{ backgroundColor: 'var(--color-confirmed)', color: '#FFFFFF' }}
                 onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#0A1E30')}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-confirmed)')}
