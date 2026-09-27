@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { Itinerary, Booking, ImpactedBooking, Disruption } from '../lib/types';
 import { getAtRiskConnections, calculateTripRiskScore, detectCombinedImpact } from '../lib/impactEngine';
 import { topoSortBookings } from '../lib/topoSort';
@@ -221,6 +222,73 @@ function SimulateDisruptionRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// VIEW SWITCH ANIMATION CONSTANTS & VARIANTS
+// ---------------------------------------------------------------------------
+const VIEW_INDICES: Record<'itinerary' | 'timeline' | 'map', number> = {
+  itinerary: 0,
+  timeline: 1,
+  map: 2,
+};
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+const viewVariants = {
+  enter: (direction: number) => ({
+    x: direction < 0 ? -36 : direction > 0 ? 36 : 0,
+    opacity: 0,
+    filter: 'blur(3px)',
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.32,
+      ease: EASE,
+    },
+  },
+  exit: (direction: number) => ({
+    x: direction < 0 ? 36 : direction > 0 ? -36 : 0,
+    opacity: 0,
+    filter: 'blur(3px)',
+    transition: {
+      duration: 0.2,
+      ease: EASE,
+    },
+  }),
+};
+
+const sidebarVariants = {
+  enter: (direction: number) => ({
+    x: direction < 0 ? -32 : direction > 0 ? 32 : 0,
+    opacity: 0,
+    scale: 0.98,
+    filter: 'blur(3px)',
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    filter: 'blur(0px)',
+    transition: {
+      duration: 0.35,
+      delay: 0.04,
+      ease: EASE,
+    },
+  },
+  exit: (direction: number) => ({
+    x: direction < 0 ? 32 : direction > 0 ? -32 : 0,
+    opacity: 0,
+    scale: 0.98,
+    filter: 'blur(3px)',
+    transition: {
+      duration: 0.18,
+      ease: EASE,
+    },
+  }),
+};
+
 export default function ItineraryView({ itinerary }: Props) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -232,6 +300,7 @@ export default function ItineraryView({ itinerary }: Props) {
   }, []);
 
   const [view, setView] = useState<'itinerary' | 'timeline' | 'map'>(initialView);
+  const [direction, setDirection] = useState<number>(0);
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedBookingId, setSelectedBookingId] = useState<string>('bkg-flight-1');
 
@@ -277,7 +346,13 @@ export default function ItineraryView({ itinerary }: Props) {
   useEffect(() => {
     const p = searchParams.get('view');
     if (p === 'itinerary' || p === 'timeline' || p === 'map') {
-      setView(p);
+      if (p !== view) {
+        const prevIdx = VIEW_INDICES[view];
+        const newIdx = VIEW_INDICES[p];
+        const dir = newIdx > prevIdx ? 1 : -1;
+        setDirection(dir);
+        setView(p);
+      }
     }
     if (searchParams.get('simulate') === 'true') {
       // Only open simulate modal if the trip allows editing
@@ -286,16 +361,21 @@ export default function ItineraryView({ itinerary }: Props) {
       next.delete('simulate');
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, view, canEdit]);
 
   const handleViewChange = useCallback(
     (newView: 'itinerary' | 'timeline' | 'map') => {
+      if (newView === view) return;
+      const prevIdx = VIEW_INDICES[view];
+      const newIdx = VIEW_INDICES[newView];
+      const dir = newIdx > prevIdx ? 1 : -1;
+      setDirection(dir);
       setView(newView);
       const next = new URLSearchParams(searchParams);
       next.set('view', newView);
       setSearchParams(next, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [view, searchParams, setSearchParams]
   );
 
   const activeBottomTab: MobileTabKey = useMemo(() => {
@@ -687,101 +767,41 @@ export default function ItineraryView({ itinerary }: Props) {
             </div>
           </div>
 
-          {/* Mobile Trip Health & Resilience Card (Shows first on phone) */}
-          <div className="lg:hidden bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
-            {/* Top Header */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-gray-900 font-bold text-sm">
-                <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center">
-                  <ShieldCheck size={15} />
-                </div>
-                <span>Trip Health Score</span>
-              </div>
-
-              <div
-                className={`px-2.5 py-0.5 rounded-full text-2xs font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 ${
-                  healthStatus === 'on-track'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : healthStatus === 'at-risk'
-                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    healthStatus === 'on-track'
-                      ? 'bg-emerald-500'
-                      : healthStatus === 'at-risk'
-                      ? 'bg-amber-500'
-                      : 'bg-rose-500'
-                  }`}
-                />
-                <span>{healthStatus === 'on-track' ? 'ON TRACK' : healthStatus === 'at-risk' ? 'AT RISK' : 'DISRUPTED'}</span>
-              </div>
-            </div>
-
-            {/* Score & Progress Bar */}
-            <div className="my-2.5 flex items-center justify-between gap-4">
-              <div className="flex items-baseline gap-1">
-                <span className="font-display font-black text-3xl text-gray-900 leading-none font-mono">
-                  {healthScore}
-                </span>
-                <span className="text-xs font-medium text-gray-400 font-mono">/100</span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="flex-1 max-w-[170px] h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500 bg-emerald-500"
-                  style={{ width: `${healthScore}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Footer note */}
-            <div className="flex items-center justify-between text-2xs text-gray-500 pt-2 border-t border-gray-100">
-              <span>Schedule buffers are well-calibrated.</span>
-              <span className="font-mono text-gray-400 font-medium">0 active conflicts</span>
-            </div>
-          </div>
-
           {/* Toolbar / Tab Switcher (Desktop only — mobile uses floating MobileBottomNav and hero banner actions) */}
           <div className="hidden lg:flex items-center justify-between gap-3">
-            {/* View tabs — shown on desktop */}
+            {/* View tabs — shown on desktop with fluid animated indicator */}
             <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200/90 shadow-2xs">
-              <button
-                onClick={() => handleViewChange('itinerary')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  view === 'itinerary'
-                    ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <ListOrdered size={14} />
-                <span>Itinerary</span>
-              </button>
-              <button
-                onClick={() => handleViewChange('timeline')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  view === 'timeline'
-                    ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <CalendarDays size={14} />
-                <span>Timeline</span>
-              </button>
-              <button
-                onClick={() => handleViewChange('map')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                  view === 'map'
-                    ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <MapIcon size={14} />
-                <span>Map</span>
-              </button>
+              {(
+                [
+                  { id: 'itinerary', label: 'Itinerary', icon: ListOrdered },
+                  { id: 'timeline', label: 'Timeline', icon: CalendarDays },
+                  { id: 'map', label: 'Map', icon: MapIcon },
+                ] as const
+              ).map((tab) => {
+                const isActive = view === tab.id;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleViewChange(tab.id)}
+                    className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors duration-200 z-10 ${
+                      isActive
+                        ? 'text-[#1D4ED8]'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50/60'
+                    }`}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeDesktopViewTabIndicator"
+                        className="absolute inset-0 bg-[#EBF3FF] rounded-lg shadow-2xs -z-10"
+                        transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                      />
+                    )}
+                    <Icon size={14} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Desktop Actions */}
@@ -816,80 +836,192 @@ export default function ItineraryView({ itinerary }: Props) {
             </div>
           </div>
 
-          {/* VIEW 1: Timeline View (Designed matching user screenshot) */}
-          {view === 'timeline' && (
-            <TimelineView
-              itinerary={itinerary}
-              sortedBookings={filteredBookings}
-              selectedBookingId={selectedBookingId}
-              onSelectBooking={setSelectedBookingId}
-              activeDisruptions={activeDisruptions}
-              impactedMap={impactedMap}
-              atRiskByBookingId={atRiskByBookingId}
-              onReportDisruption={canEdit ? () => setSimulateModal(true) : undefined}
-            />
-          )}
+          {/* Active View Container with AnimatePresence */}
+          <div className="relative min-w-0">
+            <AnimatePresence mode="wait" custom={direction}>
+              {/* VIEW 1: Timeline View */}
+              {view === 'timeline' && (
+                <motion.div
+                  key="timeline"
+                  custom={direction}
+                  variants={viewVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="min-w-0"
+                >
+                  <TimelineView
+                    itinerary={itinerary}
+                    sortedBookings={filteredBookings}
+                    selectedBookingId={selectedBookingId}
+                    onSelectBooking={setSelectedBookingId}
+                    activeDisruptions={activeDisruptions}
+                    impactedMap={impactedMap}
+                    atRiskByBookingId={atRiskByBookingId}
+                    onReportDisruption={canEdit ? () => setSimulateModal(true) : undefined}
+                  />
+                </motion.div>
+              )}
 
-          {/* VIEW 2: Itinerary Cards View */}
-          {view === 'itinerary' && (
-            <div className="relative pt-2 min-w-0">
-              {/* Vertical Spine Line */}
-              <div
-                className="absolute left-[13px] sm:left-[15px] top-6 bottom-8 w-[2px] bg-gray-200"
-                aria-hidden="true"
-              />
+              {/* VIEW 2: Itinerary Cards View */}
+              {view === 'itinerary' && (
+                <motion.div
+                  key="itinerary"
+                  custom={direction}
+                  variants={viewVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="relative pt-2 min-w-0"
+                >
+                  {/* Mobile Trip Health & Resilience Card (Shows first on phone in Itinerary view) */}
+                  <div className="lg:hidden mb-4 bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
+                    {/* Top Header */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-gray-900 font-bold text-sm">
+                        <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center">
+                          <ShieldCheck size={15} />
+                        </div>
+                        <span>Trip Health Score</span>
+                      </div>
 
-              {/* Itinerary Cards */}
-              <div className="space-y-1 min-w-0">
-                {filteredBookings.map((booking, idx) => {
-                  const originalIndex = sortedBookings.findIndex((b) => b.id === booking.id) + 1;
-                  const isDisruptionSource =
-                    activeDisruptions.some((d) => d.bookingId === booking.id) ||
-                    sandboxDisruption?.bookingId === booking.id;
-                  const impactedBooking = impactedMap.get(booking.id);
-                  const atRiskConns = atRiskByBookingId.get(booking.id) ?? [];
+                      <div
+                        className={`px-2.5 py-0.5 rounded-full text-2xs font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 ${
+                          healthStatus === 'on-track'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : healthStatus === 'at-risk'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            healthStatus === 'on-track'
+                              ? 'bg-emerald-500'
+                              : healthStatus === 'at-risk'
+                              ? 'bg-amber-500'
+                              : 'bg-rose-500'
+                          }`}
+                        />
+                        <span>{healthStatus === 'on-track' ? 'ON TRACK' : healthStatus === 'at-risk' ? 'AT RISK' : 'DISRUPTED'}</span>
+                      </div>
+                    </div>
 
-                  return (
-                    <ItineraryCard
-                      key={booking.id}
-                      booking={booking}
-                      index={originalIndex > 0 ? originalIndex : idx + 1}
-                      destination={itinerary.destination}
-                      isDisruptionSource={isDisruptionSource}
-                      impactedBooking={impactedBooking}
-                      atRiskConns={atRiskConns}
+                    {/* Score & Progress Bar */}
+                    <div className="my-2.5 flex items-center justify-between gap-4">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-display font-black text-3xl text-gray-900 leading-none font-mono">
+                          {healthScore}
+                        </span>
+                        <span className="text-xs font-medium text-gray-400 font-mono">/100</span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="flex-1 max-w-[170px] h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full bg-emerald-500"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${healthScore}%` }}
+                          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Footer note */}
+                    <div className="flex items-center justify-between text-2xs text-gray-500 pt-2 border-t border-gray-100">
+                      <span>Schedule buffers are well-calibrated.</span>
+                      <span className="font-mono text-gray-400 font-medium">0 active conflicts</span>
+                    </div>
+                  </div>
+
+                  {/* Vertical Spine Line */}
+                  <div
+                    className="absolute left-[13px] sm:left-[15px] top-6 bottom-8 w-[2px] bg-gray-200"
+                    aria-hidden="true"
+                  />
+
+                  {/* Itinerary Cards */}
+                  <div className="space-y-1 min-w-0">
+                    {filteredBookings.map((booking, idx) => {
+                      const originalIndex = sortedBookings.findIndex((b) => b.id === booking.id) + 1;
+                      const isDisruptionSource =
+                        activeDisruptions.some((d) => d.bookingId === booking.id) ||
+                        sandboxDisruption?.bookingId === booking.id;
+
+                      const sourceDisruption =
+                        activeDisruptions.find((d) => d.bookingId === booking.id) ??
+                        (sandboxDisruption?.bookingId === booking.id ? sandboxDisruption : undefined);
+                      const sourceDelayMinutes =
+                        sourceDisruption?.disruptionType === 'delay'
+                          ? (sourceDisruption.delayMinutes ?? 0)
+                          : 0;
+
+                      const impactedBooking = impactedMap.get(booking.id);
+                      const atRiskConns = atRiskByBookingId.get(booking.id) ?? [];
+
+                      return (
+                        <ItineraryCard
+                          key={booking.id}
+                          booking={booking}
+                          index={originalIndex > 0 ? originalIndex : idx + 1}
+                          destination={itinerary.destination}
+                          isDisruptionSource={isDisruptionSource}
+                          sourceDelayMinutes={sourceDelayMinutes}
+                          impactedBooking={impactedBooking}
+                          atRiskConns={atRiskConns}
+                        />
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+
+              {/* VIEW 3: Map View (OpenStreetMap with Interactive Waypoints matching screenshot) */}
+              {view === 'map' && (
+                <motion.div
+                  key="map"
+                  custom={direction}
+                  variants={viewVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="min-w-0"
+                >
+                  <Suspense fallback={
+                    <div className="flex items-center justify-center h-96">
+                      <div
+                        className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
+                      />
+                    </div>
+                  }>
+                    <MapView
+                      itinerary={itinerary}
+                      sortedBookings={filteredBookings}
+                      selectedBookingId={selectedBookingId}
+                      onSelectBooking={setSelectedBookingId}
+                      activeDisruptions={activeDisruptions}
+                      impactedMap={impactedMap}
                     />
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* VIEW 3: Map View (OpenStreetMap with Interactive Waypoints matching screenshot) */}
-          {view === 'map' && (
-            <Suspense fallback={
-              <div className="flex items-center justify-center h-96">
-                <div
-                  className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
-                  style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
-                />
-              </div>
-            }>
-              <MapView
-                itinerary={itinerary}
-                sortedBookings={filteredBookings}
-                selectedBookingId={selectedBookingId}
-                onSelectBooking={setSelectedBookingId}
-                activeDisruptions={activeDisruptions}
-                impactedMap={impactedMap}
-              />
-            </Suspense>
-          )}
+                  </Suspense>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Sidebar (lg:col-span-4) - Hidden in Map View as MapView has its own floating panels */}
-        {view !== 'map' && (
-          <div className="lg:col-span-4 min-w-0 space-y-5">
+        <AnimatePresence mode="wait" custom={direction}>
+          {view !== 'map' && (
+            <motion.div
+              key={view}
+              custom={direction}
+              variants={sidebarVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              className="lg:col-span-4 min-w-0 space-y-5"
+            >
           {view === 'timeline' ? (
             /* Selected Booking Detail Card starting at the top, aligned with Hero Banner */
             selectedBooking && (
@@ -957,9 +1089,11 @@ export default function ItineraryView({ itinerary }: Props) {
 
                   {/* Progress bar */}
                   <div className="flex-1 max-w-[150px] h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500 bg-emerald-500"
-                      style={{ width: `${healthScore}%` }}
+                    <motion.div
+                      className="h-full rounded-full bg-emerald-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${healthScore}%` }}
+                      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1], delay: 0.12 }}
                     />
                   </div>
                 </div>
@@ -1103,7 +1237,7 @@ export default function ItineraryView({ itinerary }: Props) {
                     Possible impacts
                   </h3>
                   <button
-                    onClick={() => setView('timeline')}
+                    onClick={() => handleViewChange('timeline')}
                     className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
                   >
                     <span>View details</span>
@@ -1202,8 +1336,9 @@ export default function ItineraryView({ itinerary }: Props) {
               </div>}
             </>
           )}
-        </div>
+        </motion.div>
       )}
+    </AnimatePresence>
     </div>
 
 

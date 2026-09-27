@@ -294,6 +294,16 @@ export function detectImpact(
     const bookingStart = parseTime(booking.startTime);
     const availableBuffer = minutesBetween(latestDepEndTime, bookingStart);
 
+    if (booking.type === 'hotel') {
+      // Hotel check-in: arriving after earliest check-in time (e.g. 14:00) is normal.
+      // Effective check-in is latestDepEndTime + bufferMinutes (or scheduled start if earlier).
+      const effectiveCheckIn = availableBuffer < booking.bufferMinutes
+        ? addMinutes(latestDepEndTime, booking.bufferMinutes)
+        : bookingStart;
+      effectiveEndTimes.set(bookingId, effectiveCheckIn);
+      continue;
+    }
+
     if (availableBuffer < booking.bufferMinutes) {
       // Buffer is insufficient: booking's effective start must be pushed out.
       // effectiveStart = latestDepEnd + requiredBuffer
@@ -303,13 +313,7 @@ export function detectImpact(
         parseTime(booking.endTime)
       );
       const effectiveEnd = addMinutes(effectiveStart, originalDuration);
-      // Store the type-correct reference time for THIS (now-shifted) booking.
-      // For hotels: effectiveStart IS the shifted check-in → store that.
-      // For others: store effectiveEnd (arrival time after the pushed duration).
-      effectiveEndTimes.set(
-        bookingId,
-        booking.type === 'hotel' ? effectiveStart : effectiveEnd
-      );
+      effectiveEndTimes.set(bookingId, effectiveEnd);
     } else {
       // Buffer is fine: store type-correct reference time.
       effectiveEndTimes.set(bookingId, getHotelReferenceTime(booking));
@@ -365,6 +369,39 @@ export function detectImpact(
 
       const bookingStart = parseTime(downBooking.startTime);
       const availableBuffer = minutesBetween(latestDepEnd, bookingStart);
+
+      // Special handling for hotel check-ins:
+      // Hotels do not require travelers to arrive at check-in time sharp.
+      // Arriving in the afternoon/evening before 23:00 is standard and NOT an issue.
+      if (downBooking.type === 'hotel') {
+        const bookingEnd = parseTime(downBooking.endTime);
+        const arrivalTime = addMinutes(latestDepEnd, downBooking.bufferMinutes);
+
+        if (arrivalTime > bookingEnd) {
+          impacted.push({
+            booking: downBooking,
+            reason: `Arrival time (${arrivalTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}) is past checkout date. Booking cannot be utilized.`,
+            bufferShortfallMinutes: Infinity,
+            severity: "broken",
+          });
+        } else {
+          // Check if arrival is late at night (past 23:00 on check-in day)
+          const checkInMidnight = new Date(bookingStart);
+          checkInMidnight.setHours(23, 0, 0, 0);
+          if (arrivalTime > checkInMidnight) {
+            const lateMins = Math.round(minutesBetween(checkInMidnight, arrivalTime));
+            impacted.push({
+              booking: downBooking,
+              reason: `Late arrival at ${arrivalTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}. Hotel notification recommended for check-in after 23:00.`,
+              bufferShortfallMinutes: lateMins,
+              effectiveDelayMinutes: Math.round(minutesBetween(bookingStart, arrivalTime)),
+              severity: "at-risk",
+            });
+          }
+        }
+        continue;
+      }
+
       const shortfall = downBooking.bufferMinutes - availableBuffer;
 
       if (shortfall > 0) {
@@ -433,6 +470,24 @@ export function getAtRiskConnections(
     for (const depId of booking.dependsOn) {
       const depBooking = bookingMap.get(depId);
       if (!depBooking) continue;
+
+      if (booking.type === 'hotel') {
+        // Hotel check-in has a flexible arrival window through 23:00 on check-in day
+        const depEnd = getHotelReferenceTime(depBooking);
+        const checkInDayLimit = new Date(parseTime(booking.startTime));
+        checkInDayLimit.setHours(23, 0, 0, 0);
+        const bufferToLateNight = minutesBetween(depEnd, checkInDayLimit);
+        if (bufferToLateNight < booking.bufferMinutes) {
+          atRisk.push({
+            booking,
+            dependencyBooking: depBooking,
+            bufferRemaining: Math.round(bufferToLateNight),
+            bufferShortfallMinutes: Math.round(booking.bufferMinutes - bufferToLateNight),
+            riskLevel: "critical",
+          });
+        }
+        continue;
+      }
 
       // Use the type-correct reference time: check-in for hotels, arrival for others.
       const depEnd = getHotelReferenceTime(depBooking);

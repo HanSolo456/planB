@@ -17,6 +17,8 @@ interface ItineraryCardProps {
   index: number;
   destination: string;
   isDisruptionSource?: boolean;
+  /** Delay minutes for the source booking — covers both activeDisruptions and sandbox mode */
+  sourceDelayMinutes?: number;
   impactedBooking?: ImpactedBooking;
   atRiskConns?: AtRiskConnection[];
 }
@@ -26,30 +28,37 @@ export default function ItineraryCard({
   index,
   destination,
   isDisruptionSource = false,
+  sourceDelayMinutes,
   impactedBooking,
   atRiskConns = [],
 }: ItineraryCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const { activeDisruptions } = useAppState();
-  const activeDisruption = activeDisruptions.find((d) => d.bookingId === booking.id) ?? null;
 
-  // ── Revised time calculation (same logic as BookingCard) ──
+  // ── Revised time calculation ──
+  // sourceDelayMinutes is passed from ItineraryView and covers both
+  // activeDisruption and sandboxDisruption for the source booking.
   const isDelaySource =
     isDisruptionSource &&
-    activeDisruption?.disruptionType === 'delay' &&
-    (activeDisruption?.delayMinutes ?? 0) > 0;
+    (sourceDelayMinutes ?? 0) > 0;
 
   const cascadeDelay =
     !isDisruptionSource &&
     impactedBooking &&
-    activeDisruptions.some((d) => d.disruptionType === 'delay') &&
     Number.isFinite(impactedBooking.effectiveDelayMinutes) &&
     (impactedBooking.effectiveDelayMinutes ?? 0) > 0
       ? impactedBooking.effectiveDelayMinutes!
       : 0;
 
-  const effectiveDelay = isDelaySource ? (activeDisruption?.delayMinutes ?? 0) : cascadeDelay;
+  // Extract meta details
+  const meta = booking.meta || {};
+
+  // Post-recovery: booking.startTime is already the new (delayed) time,
+  // and the original times are stamped in meta. Show strikethrough original → new.
+  const isRecovered = booking.status === 'recovered' && !!meta.originalStartTime;
+
+  const effectiveDelay = isDelaySource ? (sourceDelayMinutes ?? 0) : cascadeDelay;
   const hasDelay = effectiveDelay > 0;
 
   function shiftTime(iso: string, mins: number): string {
@@ -71,9 +80,11 @@ export default function ItineraryCard({
   // Determine status & styling
   const isBroken = impactedBooking?.severity === 'broken';
   const isAtRisk =
-    impactedBooking?.severity === 'at-risk' ||
-    atRiskConns.length > 0 ||
-    booking.status === 'at-risk';
+    !isRecovered &&
+    booking.status !== 'recovered' &&
+    (impactedBooking?.severity === 'at-risk' ||
+      atRiskConns.length > 0 ||
+      booking.status === 'at-risk');
 
   let statusLabel = 'CONFIRMED';
   let statusBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200/90';
@@ -96,10 +107,12 @@ export default function ItineraryCard({
   } else if (isAtRisk) {
     statusLabel = 'AT RISK';
     statusBadgeClass = 'bg-amber-50 text-amber-700 border-amber-200/90';
+  } else if (isRecovered || booking.status === 'recovered') {
+    statusLabel = 'RECOVERED';
+    statusBadgeClass = 'bg-teal-50 text-teal-700 border-teal-200/90';
+    stepCircleClass = 'bg-teal-50 border-teal-500 text-teal-700';
   }
 
-  // Extract meta details
-  const meta = booking.meta || {};
   const tags: string[] = Array.isArray(meta.tags)
     ? (meta.tags as string[])
     : [
@@ -214,7 +227,7 @@ export default function ItineraryCard({
             <div className="flex items-start justify-between gap-3 min-w-0">
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <h3 className="font-display font-bold text-base text-gray-900 leading-snug break-words">
-                  {booking.title}
+                  {booking.title.replace(/(\s*\(Delayed\))+/gi, ' (Delayed)').trim()}
                 </h3>
                 <span
                   className={`px-2 py-0.5 rounded-md font-mono text-3xs sm:text-2xs font-bold uppercase tracking-wider border flex-shrink-0 ${statusBadgeClass}`}
@@ -257,10 +270,31 @@ export default function ItineraryCard({
                 <span>{formattedDate}</span>
               </div>
 
-              {/* Time — with strikethrough + revised when disrupted */}
+              {/* Time — with strikethrough + revised when disrupted or recovered */}
               <div className="flex items-center gap-1.5 min-w-0">
-                <Clock size={13} className={`flex-shrink-0 ${hasDelay ? 'text-amber-500' : 'text-gray-400'}`} />
-                {hasDelay ? (
+                <Clock size={13} className={`flex-shrink-0 ${hasDelay ? 'text-amber-500' : isRecovered ? 'text-emerald-500' : 'text-gray-400'}`} />
+                {isRecovered ? (
+                  // Post-recovery: booking.startTime is already the new delayed time;
+                  // original times are in meta. Show ~~original~~ → new.
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    {Boolean(meta.originalStartTime) && (
+                      <span className="line-through text-gray-400">
+                        {new Date(meta.originalStartTime as string).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        {' – '}
+                        {meta.originalEndTime
+                          ? new Date(meta.originalEndTime as string).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                          : endTimeStr
+                        }
+                      </span>
+                    )}
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
+                        rescheduled
+                      </span>
+                      {startTimeStr} – {endTimeStr}
+                    </span>
+                  </span>
+                ) : hasDelay ? (
                   <span className="flex items-center gap-1.5 flex-wrap">
                     {/* Original — struck through */}
                     <span className="line-through text-gray-400">
@@ -268,7 +302,7 @@ export default function ItineraryCard({
                     </span>
                     {/* Revised */}
                     <span className={`font-semibold flex items-center gap-1 ${isDelaySource ? 'text-rose-600' : 'text-amber-600'}`}>
-                      <span className="text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded-md ${isDelaySource ? 'bg-rose-100' : 'bg-amber-100'}">
+                      <span className={`text-[10px] font-bold uppercase tracking-wide px-1 py-0.5 rounded-md ${isDelaySource ? 'bg-rose-100' : 'bg-amber-100'}`}>
                         +{effectiveDelay}m
                       </span>
                       {shiftTime(booking.startTime, effectiveDelay)} –{' '}

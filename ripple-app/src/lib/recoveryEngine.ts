@@ -15,11 +15,13 @@ import type {
   Disruption,
   RecoveryOption,
   ScoredRecoveryOption,
+  ImpactedBooking,
   TravelerPreferences,
   AvailabilityContext,
   RefundEligibility,
 } from "./types";
 import { topoSortBookings } from "./topoSort";
+import { detectImpact } from "./impactEngine";
 
 // ---------------------------------------------------------------------------
 // SCORING WEIGHTS
@@ -444,12 +446,12 @@ function generateDelayRecoveries(
   // -------------------------------------------------------------------------
   // OPTION 1: Wait it out — accept the delay and proceed with existing booking.
   // Best when the downstream bookings have enough slack to absorb the delay.
-  // -------------------------------------------------------------------------
   {
+    const cleanTitle = original.title.replace(/\s*\(Delayed\)/gi, "").trim();
     const replacement: Booking = {
       ...original,
       id: makeId(original.id, "accept"),
-      title: `${original.title} (Delayed)`,
+      title: `${cleanTitle} (Delayed)`,
       startTime: shiftISOTime(original.startTime, delayMin),
       endTime: shiftISOTime(original.endTime, delayMin),
       status: "at-risk",
@@ -990,9 +992,13 @@ export function applyRecoveryOption(
   // This is what powers the "strikethrough original → new time" rendering in BookingCard.
   const originalBooking = itinerary.bookings.find((b) => b.id === option.affectedBookingId);
 
+  const rawTitle = option.replacementBooking?.title ?? originalBooking?.title ?? '';
+  const cleanReplacementTitle = rawTitle.replace(/(\s*\(Delayed\))+/gi, ' (Delayed)').trim();
+
   const replacementWithOriginalId: Booking = {
     ...option.replacementBooking,
     id: option.affectedBookingId,
+    title: cleanReplacementTitle,
     status: "recovered" as const,
     meta: {
       ...option.replacementBooking.meta,
@@ -1008,10 +1014,54 @@ export function applyRecoveryOption(
   // At-risk bookings are reset to 'confirmed' (not 'recovered') so the
   // DisruptionTrigger button continues to render normally on them and
   // they can be disrupted again in subsequent scenarios.
+  //
+  // For delay recoveries: run detectImpact on the original itinerary to find
+  // which downstream bookings need their times shifted, and by how much.
+  // We stamp originalStartTime/originalEndTime on each one so ItineraryCard
+  // can show "~~09:30 – 10:45~~ → 15:35 – 16:50" for the recovered state.
+  let cascadeImpactMap = new Map<string, ImpactedBooking>();
+  if (option.timeDelta > 0) {
+    // Reconstruct the original disruption to run the impact engine
+    const originalDisruption: Disruption = {
+      bookingId: option.affectedBookingId,
+      disruptionType: 'delay',
+      delayMinutes: option.timeDelta,
+      reason: option.description,
+      timestamp: new Date().toISOString(),
+    };
+    try {
+      const cascadeResults = detectImpact(itinerary, originalDisruption);
+      for (const ib of cascadeResults) {
+        cascadeImpactMap.set(ib.booking.id, ib);
+      }
+    } catch {
+      // If detection fails, fall back gracefully — cards just won't show shifted times
+    }
+  }
+
   const updatedBookings: Booking[] = itinerary.bookings.map((booking) => {
     if (booking.id === option.affectedBookingId) {
       // The original slot is replaced — we drop it below.
       return { ...booking, status: "disrupted" as const };
+    }
+    const cascadeImpact = cascadeImpactMap.get(booking.id);
+    if (cascadeImpact && (cascadeImpact.effectiveDelayMinutes ?? 0) > 0) {
+      // Shift this booking's times forward and stamp originals for strikethrough display
+      const shiftMins = cascadeImpact.effectiveDelayMinutes!;
+      const isHotel = booking.type === 'hotel';
+      return {
+        ...booking,
+        startTime: shiftISOTime(booking.startTime, shiftMins),
+        // For hotels, checkout time (endTime) never changes!
+        endTime: isHotel ? booking.endTime : shiftISOTime(booking.endTime, shiftMins),
+        status: "recovered" as const,
+        meta: {
+          ...booking.meta,
+          originalStartTime: booking.startTime,
+          originalEndTime: isHotel ? undefined : booking.endTime,
+          recoveredFrom: `Cascaded from ${option.description}`,
+        },
+      };
     }
     if (booking.status === "at-risk") {
       return { ...booking, status: "confirmed" as const };

@@ -633,10 +633,20 @@ export default function MapView({
       }
     }
 
-    buildAndRender().catch(console.warn);
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    buildAndRender().then(() => {
+      if (!cancelled) {
+        resizeTimer = setTimeout(() => {
+          if (!cancelled && mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 200);
+      }
+    }).catch(console.warn);
 
     return () => {
       cancelled = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;

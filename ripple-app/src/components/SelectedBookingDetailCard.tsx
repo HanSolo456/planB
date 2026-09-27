@@ -321,75 +321,286 @@ export default function SelectedBookingDetailCard({
 
         {/* Tab 2: Policies View */}
         {activeTab === 'policies' && (
-          <div className="space-y-3 pt-1 text-xs text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
-            <div>
-              <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
-                <Shield size={13} className="text-blue-600" />
-                <span>Cancellation Terms</span>
-              </p>
-              <p className="text-gray-600 leading-relaxed text-2xs">
-                {booking.cancellationPolicy.policy === 'free'
-                  ? `100% refund if cancelled up to ${booking.cancellationPolicy.cutoffHours} hours before departure. Instant automated refund initiation.`
-                  : booking.cancellationPolicy.policy === 'partial-refund'
-                  ? 'Partial refund permitted up to 24 hours prior. Standard airline deduction fee applies (approx ₹2,500).'
-                  : 'Strict non-refundable fare rules apply. Rescheduling credit may be issued in emergency circumstances.'}
-              </p>
+          booking.type === 'hotel' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Shield size={13} className="text-blue-600" />
+                  <span>Cancellation Terms</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  {booking.cancellationPolicy.policy === 'free'
+                    ? `Free cancellation up to ${booking.cancellationPolicy.cutoffHours ?? 48} hours prior to check-in. Instant automated refund initiation.`
+                    : booking.cancellationPolicy.policy === 'partial-refund'
+                    ? `Partial refund (${booking.cancellationPolicy.refundPercent ?? 50}%) permitted prior to check-in.`
+                    : 'Strict non-refundable booking.'}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Hotel size={13} className="text-blue-600" />
+                  <span>Check-in & Stay Inclusions</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Standard check-in from 14:00 IST · Check-out by 11:00 IST. Valid Govt photo ID required. Complimentary breakfast & high-speed Wi-Fi included.
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Clock size={13} className="text-blue-600" />
+                  <span>Late Arrival & Modifications</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  24-hour front desk. Please notify reception for arrivals after 23:00 to guarantee room hold.
+                </p>
+              </div>
             </div>
-
-            <div className="pt-2 border-t border-gray-200/60">
-              <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
-                <Luggage size={13} className="text-blue-600" />
-                <span>Baggage & Allowance</span>
-              </p>
-              <p className="text-gray-600 leading-relaxed text-2xs">
-                Check-in: 15 kg per passenger. Cabin luggage: 1 hand baggage up to 7 kg + personal laptop bag.
-              </p>
+          ) : booking.type === 'activity' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Shield size={13} className="text-blue-600" />
+                  <span>Cancellation Terms</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  {booking.cancellationPolicy.policy === 'free'
+                    ? `100% refund if cancelled up to ${booking.cancellationPolicy.cutoffHours ?? 24} hours before departure.`
+                    : booking.cancellationPolicy.policy === 'partial-refund'
+                    ? `50% refund if cancelled 24 hours prior; non-refundable within 24 hours.`
+                    : 'Strict non-refundable excursion charter.'}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Ship size={13} className="text-blue-600" />
+                  <span>Safety & Inclusions</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Certified life jackets and crew on board. Dolphin sighting, sunset cruise, and complimentary refreshments included.
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Clock size={13} className="text-blue-600" />
+                  <span>Weather & Schedule Guarantee</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Tours operate subject to maritime weather. Operator provides free rescheduling or 100% refund in case of adverse sea conditions.
+                </p>
+              </div>
             </div>
-
-            <div className="pt-2 border-t border-gray-200/60">
-              <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
-                <Clock size={13} className="text-blue-600" />
-                <span>Reschedule Allowance</span>
-              </p>
-              <p className="text-gray-600 leading-relaxed text-2xs">
-                Reschedule allowed up to 2 hours before departure subject to fare difference and carrier administrative fee.
-              </p>
+          ) : booking.type === 'transfer' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Shield size={13} className="text-blue-600" />
+                  <span>Cancellation Terms</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  {booking.cancellationPolicy.policy === 'free'
+                    ? `Free cancellation up to ${booking.cancellationPolicy.cutoffHours ?? 6} hours before scheduled pickup.`
+                    : 'Standard transfer cancellation terms apply.'}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Car size={13} className="text-blue-600" />
+                  <span>Vehicle & Luggage Capacity</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Air-conditioned executive vehicle. Accommodates up to 4 large suitcases plus cabin luggage.
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Clock size={13} className="text-blue-600" />
+                  <span>Flight Delay Guarantee</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Complimentary 60 minutes waiting time from actual flight touchdown. Pickup adjusts automatically to flight delays.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Shield size={13} className="text-blue-600" />
+                  <span>Cancellation Terms</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  {booking.cancellationPolicy.policy === 'free'
+                    ? `100% refund if cancelled up to ${booking.cancellationPolicy.cutoffHours} hours before departure. Instant automated refund initiation.`
+                    : booking.cancellationPolicy.policy === 'partial-refund'
+                    ? 'Partial refund permitted up to 24 hours prior. Standard airline deduction fee applies (approx ₹2,500).'
+                    : 'Strict non-refundable fare rules apply. Rescheduling credit may be issued in emergency circumstances.'}
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Luggage size={13} className="text-blue-600" />
+                  <span>Baggage & Allowance</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Check-in: 15 kg per passenger. Cabin luggage: 1 hand baggage up to 7 kg + personal laptop bag.
+                </p>
+              </div>
+              <div className="pt-2 border-t border-gray-200/60">
+                <p className="font-bold text-gray-900 mb-1 flex items-center gap-1.5">
+                  <Clock size={13} className="text-blue-600" />
+                  <span>Reschedule Allowance</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed text-2xs">
+                  Reschedule allowed up to 2 hours before departure subject to fare difference and carrier administrative fee.
+                </p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Tab 3: Live Status View */}
         {activeTab === 'live' && (
-          <div className="space-y-3 pt-1 text-xs text-gray-700 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
-            <div className="flex items-center justify-between pb-2 border-b border-blue-100/80">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          booking.type === 'hotel' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between pb-2 border-b border-blue-100/80">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isDisrupted ? 'bg-rose-400' : isAtRisk ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isDisrupted ? 'bg-rose-500' : isAtRisk ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                  </span>
+                  <span className={`font-bold ${isDisrupted ? 'text-rose-800' : isAtRisk ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    {isDisrupted ? 'Reservation Disrupted' : isAtRisk ? 'Late Arrival Advised' : 'Operational & Confirmed'}
+                  </span>
+                </div>
+                <span className="font-mono text-3xs font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                  FRONT DESK DIRECT
                 </span>
-                <span className="font-bold text-emerald-800">Operational & On-Time</span>
               </div>
-              <span className="font-mono text-3xs font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
-                LIVE RADAR
-              </span>
-            </div>
 
-            <div className="grid grid-cols-2 gap-2 text-2xs">
-              <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
-                <span className="text-gray-400 block font-mono text-3xs uppercase">Departure Terminal</span>
-                <span className="font-bold text-gray-900 text-xs">Terminal 3 · Gate 42B</span>
+              <div className="grid grid-cols-2 gap-2 text-2xs">
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Check-in Window</span>
+                  <span className="font-bold text-gray-900 text-xs">From 14:00 · 24h Desk</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Check-out Time</span>
+                  <span className="font-bold text-gray-900 text-xs">By 11:00 IST</span>
+                </div>
               </div>
-              <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
-                <span className="text-gray-400 block font-mono text-3xs uppercase">Arrival Terminal</span>
-                <span className="font-bold text-gray-900 text-xs">GOI · Terminal 1</span>
-              </div>
-            </div>
 
-            <div className="text-2xs text-gray-600 flex items-center gap-1.5 pt-1">
-              <Info size={12} className="text-blue-600 flex-shrink-0" />
-              <span>Gate opens 45 mins before scheduled departure. Web check-in completed.</span>
+              <div className="text-2xs text-gray-600 flex items-center gap-1.5 pt-1">
+                <Info size={12} className="text-blue-600 flex-shrink-0" />
+                <span>Front desk notified of schedule. Room held under confirmation {booking.meta?.confirmation as string || 'MAR-9043210'}.</span>
+              </div>
             </div>
-          </div>
+          ) : booking.type === 'activity' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between pb-2 border-b border-blue-100/80">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isDisrupted ? 'bg-rose-400' : isAtRisk ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isDisrupted ? 'bg-rose-500' : isAtRisk ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                  </span>
+                  <span className={`font-bold ${isDisrupted ? 'text-rose-800' : isAtRisk ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    {isDisrupted ? 'Schedule Disrupted' : isAtRisk ? 'Schedule At Risk' : 'Operational & On Schedule'}
+                  </span>
+                </div>
+                <span className="font-mono text-3xs font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                  OPERATOR DISPATCH
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-2xs">
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Boarding Location</span>
+                  <span className="font-bold text-gray-900 text-xs">Chapora River Jetty</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Marine Conditions</span>
+                  <span className="font-bold text-emerald-700 text-xs">Calm Sea · Clear Sunset</span>
+                </div>
+              </div>
+
+              <div className="text-2xs text-gray-600 flex items-center gap-1.5 pt-1">
+                <Info size={12} className="text-blue-600 flex-shrink-0" />
+                <span>Private charter crew on standby. Boarding commences 15 mins before scheduled departure.</span>
+              </div>
+            </div>
+          ) : booking.type === 'transfer' ? (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between pb-2 border-b border-blue-100/80">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isDisrupted ? 'bg-rose-400' : isAtRisk ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isDisrupted ? 'bg-rose-500' : isAtRisk ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                  </span>
+                  <span className={`font-bold ${isDisrupted ? 'text-rose-800' : isAtRisk ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    {isDisrupted ? 'Flight Delay Conflict' : isAtRisk ? 'Pickup Time Adjusting' : 'Vehicle Dispatched'}
+                  </span>
+                </div>
+                <span className="font-mono text-3xs font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                  FLEET DISPATCH
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-2xs">
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Pickup Point</span>
+                  <span className="font-bold text-gray-900 text-xs">GOI · Arrival Gate 4</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Assigned Cab</span>
+                  <span className="font-bold text-gray-900 text-xs">{booking.meta?.vehicle as string || 'Toyota Innova Crysta'}</span>
+                </div>
+              </div>
+
+              <div className="text-2xs text-gray-600 flex items-center gap-1.5 pt-1">
+                <Info size={12} className="text-blue-600 flex-shrink-0" />
+                <span>Driver synchronizes with actual flight arrival time. Name placard displayed at exit.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-1 text-xs text-gray-700 bg-blue-50/40 p-3.5 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between pb-2 border-b border-blue-100/80">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isDisrupted ? 'bg-rose-400' : isAtRisk ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+                    <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isDisrupted ? 'bg-rose-500' : isAtRisk ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                  </span>
+                  <span className={`font-bold ${isDisrupted ? 'text-rose-800' : isAtRisk ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    {isDisrupted ? 'Flight Delayed' : isAtRisk ? 'Schedule At Risk' : 'Operational & On-Time'}
+                  </span>
+                </div>
+                <span className="font-mono text-3xs font-semibold text-blue-800 bg-blue-100 px-2 py-0.5 rounded">
+                  LIVE RADAR
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-2xs">
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Departure Terminal</span>
+                  <span className="font-bold text-gray-900 text-xs">
+                    {booking.title.toLowerCase().includes('return') || booking.id.includes('2')
+                      ? 'GOI · Terminal 1'
+                      : 'Terminal 3 · Gate 42B'}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-gray-200/70">
+                  <span className="text-gray-400 block font-mono text-3xs uppercase">Arrival Terminal</span>
+                  <span className="font-bold text-gray-900 text-xs">
+                    {booking.title.toLowerCase().includes('return') || booking.id.includes('2')
+                      ? 'DEL · Terminal 3'
+                      : 'GOI · Terminal 1'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-2xs text-gray-600 flex items-center gap-1.5 pt-1">
+                <Info size={12} className="text-blue-600 flex-shrink-0" />
+                <span>Gate opens 45 mins before scheduled departure. Web check-in completed.</span>
+              </div>
+            </div>
+          )
         )}
 
         {/* Bottom CTA Button: Report a disruption */}
