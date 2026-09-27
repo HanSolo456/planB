@@ -26,7 +26,7 @@ import {
 interface Props {
   booking: Booking;
   itinerary: Itinerary;
-  onReportDisruption: () => void;
+  onReportDisruption?: () => void;
   isDisrupted?: boolean;
   isAtRisk?: boolean;
 }
@@ -393,16 +393,18 @@ export default function SelectedBookingDetailCard({
         )}
 
         {/* Bottom CTA Button: Report a disruption */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={onReportDisruption}
-            className="w-full py-3 px-4 rounded-xl border border-rose-200/90 bg-rose-50/50 hover:bg-rose-50 text-rose-600 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs hover:shadow-xs active:scale-[0.99]"
-          >
-            <AlertTriangle size={16} className="text-rose-600 flex-shrink-0" />
-            <span>Report a disruption</span>
-          </button>
-        </div>
+        {onReportDisruption && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={onReportDisruption}
+              className="w-full py-3 px-4 rounded-xl border border-rose-200/90 bg-rose-50/50 hover:bg-rose-50 text-rose-600 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs hover:shadow-xs active:scale-[0.99]"
+            >
+              <AlertTriangle size={16} className="text-rose-600 flex-shrink-0" />
+              <span>Report a disruption</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
