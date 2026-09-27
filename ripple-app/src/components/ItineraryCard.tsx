@@ -44,9 +44,9 @@ export default function ItineraryCard({
     !isDisruptionSource &&
     impactedBooking &&
     activeDisruptions.some((d) => d.disruptionType === 'delay') &&
-    Number.isFinite(impactedBooking.bufferShortfallMinutes) &&
-    impactedBooking.bufferShortfallMinutes > 0
-      ? impactedBooking.bufferShortfallMinutes
+    Number.isFinite(impactedBooking.effectiveDelayMinutes) &&
+    (impactedBooking.effectiveDelayMinutes ?? 0) > 0
+      ? impactedBooking.effectiveDelayMinutes!
       : 0;
 
   const effectiveDelay = isDelaySource ? (activeDisruption?.delayMinutes ?? 0) : cascadeDelay;

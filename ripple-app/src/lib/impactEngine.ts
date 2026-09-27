@@ -373,6 +373,15 @@ export function detectImpact(
         const needed = downBooking.bufferMinutes;
         const available = Math.round(availableBuffer);
 
+        // effectiveDelayMinutes = how far forward the booking's start must
+        // shift: (latestDepEnd + requiredBuffer) − originalStart.
+        // This is what the UI needs to show "~~09:30~~ → 12:45", not
+        // the shortfall (which is only the missing buffer slice).
+        const effectiveStart = addMinutes(latestDepEnd, downBooking.bufferMinutes);
+        const effectiveDelayMinutes = Math.round(
+          minutesBetween(parseTime(downBooking.startTime), effectiveStart)
+        );
+
         impacted.push({
           booking: downBooking,
           reason:
@@ -380,6 +389,7 @@ export function detectImpact(
             `only ${available} min available after cascading delay. ` +
             `Shortfall: ${Math.round(shortfall)} min.`,
           bufferShortfallMinutes: Math.round(shortfall),
+          effectiveDelayMinutes,
           severity,
         });
       }

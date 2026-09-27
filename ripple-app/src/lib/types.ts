@@ -150,6 +150,13 @@ export interface ImpactedBooking {
    * Positive = this many minutes are missing.
    */
   bufferShortfallMinutes: number;
+  /**
+   * The total number of minutes this booking's start (and end) must shift
+   * forward due to cascading delays from upstream disruptions.
+   * This is effectiveStart − originalStart, NOT the same as bufferShortfallMinutes.
+   * Used by the UI to show "~~09:30~~ → 12:45" style timing updates.
+   */
+  effectiveDelayMinutes?: number;
   /** Whether this booking is fully broken (cancellation or zero buffer) vs just at risk */
   severity: "at-risk" | "broken";
   /**
