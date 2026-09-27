@@ -18,6 +18,7 @@ import {
   Play,
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { PlanBLogoMark } from './PlanBLogo';
 
 type AuthMode = 'signin' | 'signup';
 
@@ -176,10 +177,10 @@ export default function LoginPage({ onAuthSuccess }: Props) {
       className="min-h-screen font-body antialiased lg:h-screen lg:overflow-hidden"
       style={{ backgroundColor: 'var(--color-bg-base)', color: 'var(--color-text-main)' }}
     >
-      <div className="grid min-h-screen lg:h-screen lg:grid-cols-2 overflow-hidden">
+      <div className="grid min-h-screen lg:h-screen lg:grid-cols-2 overflow-x-hidden">
         {/* ── Visual panel ── */}
         <motion.section
-          className="relative min-h-[42vh] lg:min-h-full overflow-hidden"
+          className="relative h-48 sm:h-56 lg:h-full lg:min-h-full overflow-hidden shrink-0"
           initial={{ opacity: 0, x: -28 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.55, ease: panelEase, delay: 0.04 }}
@@ -193,29 +194,49 @@ export default function LoginPage({ onAuthSuccess }: Props) {
             className="absolute inset-0"
             style={{
               background:
-                'linear-gradient(180deg, rgba(18, 22, 24, 0.28) 0%, rgba(18, 22, 24, 0.18) 38%, rgba(18, 22, 24, 0.82) 100%)',
+                'linear-gradient(180deg, rgba(18, 22, 24, 0.45) 0%, rgba(18, 22, 24, 0.3) 40%, rgba(18, 22, 24, 0.88) 100%)',
             }}
           />
 
-          <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-8 lg:p-10">
-            <div className="flex items-center justify-end">
+          <div className="relative z-10 flex h-full flex-col justify-between p-4 sm:p-6 lg:p-10 pb-6 sm:pb-8 lg:pb-10">
+            {/* Top Bar Navigation */}
+            <div className="flex items-center justify-between w-full">
+              {/* Brand mark */}
+              <div className="flex items-center gap-2">
+                <PlanBLogoMark size={28} />
+                <span className="font-display text-white font-bold text-base tracking-tight drop-shadow-sm">
+                  planB
+                </span>
+                <span className="hidden sm:inline-flex ml-1.5 font-mono text-[10px] uppercase tracking-wider text-[#5EEAD4] bg-white/10 px-2 py-0.5 rounded-full border border-white/15">
+                  OPS RECOVERY
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() => navigate('/')}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/12 px-3.5 py-2 font-mono text-2xs font-semibold uppercase tracking-wider text-white backdrop-blur-md cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-3 py-1.5 font-mono text-2xs font-semibold uppercase tracking-wider text-white backdrop-blur-md cursor-pointer transition-colors"
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.22)';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.25)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.12)';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.15)';
                 }}
               >
                 <ArrowLeft size={12} />
-                Back to home
+                <span>Back to home</span>
               </button>
             </div>
 
-            <div className="max-w-lg pb-2 lg:pb-6">
+            {/* Mobile-only compact punchy headline */}
+            <div className="lg:hidden pb-3">
+              <p className="font-display text-sm xs:text-base font-bold text-white mt-1 leading-snug drop-shadow-sm">
+                When flights slip, your trip stays intact.
+              </p>
+            </div>
+
+            {/* Desktop-only full editorial narrative */}
+            <div className="hidden lg:block max-w-lg pb-2 lg:pb-6">
               <h1 className="font-display text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl lg:text-[2.7rem]">
                 When a flight slips, the rest of the trip should not collapse with it.
               </h1>
@@ -229,18 +250,21 @@ export default function LoginPage({ onAuthSuccess }: Props) {
 
         {/* ── Form panel ── */}
         <motion.section
-          className="flex items-center justify-center px-5 py-10 sm:px-10 lg:overflow-y-auto"
+          className="relative z-20 -mt-4 lg:mt-0 rounded-t-[24px] lg:rounded-none flex items-center justify-center px-5 pt-5 pb-8 sm:px-8 sm:py-8 lg:p-10 lg:overflow-y-auto shadow-2xl lg:shadow-none"
           style={{ backgroundColor: 'var(--color-bg-surface)' }}
           initial={{ opacity: 0, x: 28 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.55, ease: panelEase, delay: 0.08 }}
         >
           <div className="w-full max-w-[420px]">
-            <div className="relative mt-2 min-h-[2rem]">
+            {/* Mobile sheet pull indicator */}
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-4 lg:hidden" />
+
+            <div className="relative min-h-[1.75rem] sm:min-h-[2rem]">
               <AnimatePresence mode="wait">
                 <motion.h2
                   key={mode}
-                  className="font-display text-2xl font-bold tracking-tight text-[#17212B]"
+                  className="font-display text-xl sm:text-2xl font-bold tracking-tight text-[#17212B]"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
@@ -250,18 +274,18 @@ export default function LoginPage({ onAuthSuccess }: Props) {
                 </motion.h2>
               </AnimatePresence>
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-[#4A5568]">
+            <p className="mt-1 sm:mt-2 text-xs sm:text-sm leading-relaxed text-[#4A5568]">
               Sync itineraries across devices, or skip ahead and explore the demo as a guest.
             </p>
 
             <div
-              className="mt-7 flex border-b"
+              className="mt-5 sm:mt-7 flex border-b"
               style={{ borderColor: 'var(--color-border-subtle)' }}
             >
               <button
                 type="button"
                 onClick={() => switchMode('signin')}
-                className="flex-1 cursor-pointer border-b-2 py-2.5 font-mono text-2xs font-semibold uppercase tracking-wider transition-colors"
+                className="flex-1 cursor-pointer border-b-2 py-2 sm:py-2.5 font-mono text-2xs font-semibold uppercase tracking-wider transition-colors"
                 style={{
                   borderColor: mode === 'signin' ? 'var(--color-confirmed)' : 'transparent',
                   color: mode === 'signin' ? 'var(--color-confirmed)' : '#8896A4',
@@ -272,7 +296,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
               <button
                 type="button"
                 onClick={() => switchMode('signup')}
-                className="flex-1 cursor-pointer border-b-2 py-2.5 font-mono text-2xs font-semibold uppercase tracking-wider transition-colors"
+                className="flex-1 cursor-pointer border-b-2 py-2 sm:py-2.5 font-mono text-2xs font-semibold uppercase tracking-wider transition-colors"
                 style={{
                   borderColor: mode === 'signup' ? 'var(--color-confirmed)' : 'transparent',
                   color: mode === 'signup' ? 'var(--color-confirmed)' : '#8896A4',
@@ -282,7 +306,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form onSubmit={handleSubmit} className="mt-5 sm:mt-6 space-y-3.5 sm:space-y-4">
               <div className="space-y-1">
                 <label className="block font-mono text-2xs font-semibold uppercase tracking-wider text-[#4A5568]">
                   Email address
@@ -295,7 +319,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@planb.travel"
-                    className="w-full rounded-[2px] border bg-white py-2.5 pl-9 pr-3 font-mono text-xs transition-colors focus:border-[#0A1E30] focus:outline-hidden"
+                    className="w-full rounded-[2px] border bg-white py-2 sm:py-2.5 pl-9 pr-3 font-mono text-sm sm:text-xs transition-colors focus:border-[#0A1E30] focus:outline-hidden"
                     style={{ borderColor: 'var(--color-border)' }}
                     autoComplete="email"
                   />
@@ -314,7 +338,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full rounded-[2px] border bg-white py-2.5 pl-9 pr-10 font-mono text-xs transition-colors focus:border-[#0A1E30] focus:outline-hidden"
+                    className="w-full rounded-[2px] border bg-white py-2 sm:py-2.5 pl-9 pr-10 font-mono text-sm sm:text-xs transition-colors focus:border-[#0A1E30] focus:outline-hidden"
                     style={{ borderColor: 'var(--color-border)' }}
                     autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                   />
@@ -378,7 +402,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
               </button>
             </form>
 
-            <div className="my-5 flex items-center gap-3">
+            <div className="my-4 sm:my-5 flex items-center gap-3">
               <div className="h-px flex-1" style={{ backgroundColor: 'var(--color-border)' }} />
               <span className="font-mono text-2xs uppercase tracking-wider text-[#8896A4]">or</span>
               <div className="h-px flex-1" style={{ backgroundColor: 'var(--color-border)' }} />
@@ -408,7 +432,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
             <button
               type="button"
               onClick={() => navigate('/app/dashboard')}
-              className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[2px] py-2.5 px-4 font-mono text-xs font-bold uppercase tracking-wider transition-colors"
+              className="mt-2.5 sm:mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[2px] py-2.5 px-4 font-mono text-xs font-bold uppercase tracking-wider transition-colors"
               style={{
                 backgroundColor: 'var(--color-bg-surface-alt)',
                 color: 'var(--color-text-main)',
@@ -426,7 +450,7 @@ export default function LoginPage({ onAuthSuccess }: Props) {
               Try demo
             </button>
 
-            <p className="mt-6 text-center text-xs text-[#8896A4]">
+            <p className="mt-4 sm:mt-6 text-center text-xs text-[#8896A4]">
               Demo mode needs no account. Seed itineraries load instantly so you can trigger a
               disruption and inspect recovery options.
             </p>

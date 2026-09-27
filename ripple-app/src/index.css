@@ -290,3 +290,34 @@
 .custom-leaflet-marker:active {
   outline: none !important;
 }
+
+/* ── Mobile Bottom Navigation Bar ── */
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+}
+
+.nav-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 2px;
+  gap: 3px;
+  border-radius: 12px;
+  font-family: 'Sora', system-ui, sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nav-tab:hover {
+  opacity: 0.95;
+}
+
+.nav-tab.active {
+  font-weight: 700;
+}
+

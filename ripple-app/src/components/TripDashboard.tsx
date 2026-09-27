@@ -103,6 +103,7 @@ const LOCAL_DESTINATION_IMAGES: Array<{ keywords: string[]; src: string }> = [
   { keywords: ['paris', 'france'], src: '/Paris-2048x1506.png' },
   { keywords: ['san francisco', 'sf', 'california', 'bay area'], src: '/San Francisco-2048x1506.png' },
   { keywords: ['sydney', 'australia'], src: '/Sydney-2048x1506.png' },
+  { keywords: ['goa'], src: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=1600&q=80' },
 ];
 
 function getLocalImage(destination: string): string | null {
@@ -253,13 +254,13 @@ function TripCard({ itinerary, isSeed, onOpen, onDelete }: TripCardProps) {
           )}
         </div>
 
-        {/* Top-right: delete button, revealed on hover */}
+        {/* Top-right: delete button — always visible on mobile, hover-only on desktop */}
         {!isSeed && !confirmDelete && (
           <button
             onClick={handleDeleteClick}
-            className="absolute top-4 right-4 flex items-center justify-center w-7 h-7 rounded-full cursor-pointer transition-all duration-150 opacity-0 group-hover:opacity-100"
+            className="absolute top-4 right-4 flex items-center justify-center w-7 h-7 rounded-full cursor-pointer transition-all duration-150 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shadow-xs z-10"
             style={{
-              backgroundColor: 'rgba(0,0,0,0.50)',
+              backgroundColor: 'rgba(0,0,0,0.60)',
               border: '1px solid rgba(255,255,255,0.25)',
               color: '#fff',
             }}
@@ -271,57 +272,58 @@ function TripCard({ itinerary, isSeed, onOpen, onDelete }: TripCardProps) {
           </button>
         )}
 
-        {/* Bottom of image — destination name + meta + view trip all live here */}
-        <div className="absolute bottom-0 left-0 right-0 px-5 pb-4 flex items-end justify-between gap-4">
-          <div className="min-w-0">
+        {/* Bottom of image — destination name + meta + risk badge + view trip */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-5 pb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 z-10">
+          <div className="min-w-0 flex-1">
             <h3
-              className="font-display font-bold text-2xl leading-tight text-white truncate mb-0.5"
+              className="font-display font-bold text-xl sm:text-2xl leading-tight text-white truncate mb-0.5 drop-shadow-sm"
               title={itinerary.destination}
             >
               {itinerary.destination}
             </h3>
-            <p className="font-mono text-xs text-white/70 truncate">
+            <p className="font-mono text-xs text-white/80 truncate">
               {formatDateRange(itinerary.startDate, itinerary.endDate)}
-              <span className="mx-2 text-white/30">·</span>
-              <span className="text-white/90 font-semibold">{itinerary.bookings.length}</span> bookings
-              {!isSeed && (
+              <span className="mx-1.5 sm:mx-2 text-white/40">·</span>
+              <span className="text-white font-semibold">{itinerary.bookings.length}</span> bookings
+              {!isSeed && lastOpened && (
                 <>
-                  <span className="mx-2 text-white/30">·</span>
+                  <span className="mx-1.5 sm:mx-2 text-white/40">·</span>
                   {formatRelativeTime(lastOpened)}
                 </>
               )}
             </p>
           </div>
 
-          <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Actions: Risk Badge + View Trip CTA */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 self-end sm:self-auto">
             {/* Risk badge */}
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[2px]"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] backdrop-blur-md shadow-xs"
               style={{
-                backgroundColor: 'rgba(0,0,0,0.50)',
-                border: `1px solid rgba(255,255,255,0.18)`,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(255,255,255,0.22)',
               }}
             >
               <RiskIcon size={12} style={{ color: '#fff' }} />
-              <span className="font-mono text-xs font-bold tabular-nums" style={{ color: '#fff' }}>
+              <span className="font-mono text-xs font-bold tabular-nums text-white">
                 {riskScore.overallScore}
               </span>
-              <span className="font-mono text-2xs font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              <span className="font-mono text-2xs font-semibold uppercase" style={{ color: 'rgba(255,255,255,0.85)' }}>
                 {risk.label}
               </span>
             </div>
 
             {/* View trip CTA */}
             <span
-              className="font-mono text-xs font-semibold uppercase tracking-wider flex items-center gap-1 px-3 py-1.5 rounded-[2px] transition-all duration-150"
+              className="font-mono text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] transition-all duration-150 backdrop-blur-md shadow-xs group-hover:bg-white/30"
               style={{
-                backgroundColor: 'rgba(0,0,0,0.50)',
-                border: '1px solid rgba(255,255,255,0.28)',
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(255,255,255,0.30)',
                 color: '#fff',
               }}
             >
-              view trip
-              <ChevronRight size={12} />
+              <span>view trip</span>
+              <ChevronRight size={13} className="transition-transform group-hover:translate-x-0.5" />
             </span>
           </div>
         </div>

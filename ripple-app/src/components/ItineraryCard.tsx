@@ -123,7 +123,7 @@ export default function ItineraryCard({
       ? String(meta.charter)
       : `${booking.provider}`;
 
-  const subtitle =
+  const rawSubtitle =
     typeof meta.subtitle === 'string'
       ? meta.subtitle
       : meta.flightNumber
@@ -131,6 +131,11 @@ export default function ItineraryCard({
       : meta.bookingId
       ? `${booking.provider} · ${meta.bookingId}`
       : booking.provider;
+
+  const normTitle = booking.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normSub = (typeof rawSubtitle === 'string' ? rawSubtitle : '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const isSubtitleRedundant = normTitle === normSub || (normTitle.length > 5 && (normTitle.includes(normSub) || normSub.includes(normTitle)));
+  const subtitle = isSubtitleRedundant ? (meta.terminal ? String(meta.terminal) : null) : rawSubtitle;
 
   // Format date/time strings
   const startDateObj = new Date(booking.startTime);
@@ -238,9 +243,11 @@ export default function ItineraryCard({
             </div>
 
             {/* Row 2: Subtitle / Flight & Provider Code */}
-            <p className="text-xs text-gray-600 font-medium mt-0.5 break-words">
-              {subtitle}
-            </p>
+            {subtitle && (
+              <p className="text-xs text-gray-600 font-medium mt-0.5 break-words">
+                {subtitle}
+              </p>
+            )}
 
             {/* Row 3: Timings, Date & Route */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-600 font-medium mt-2.5 min-w-0">

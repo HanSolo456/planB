@@ -292,16 +292,59 @@ async function decompressItinerary(token: string): Promise<Itinerary | null> {
 }
 
 /**
+ * A short share code is derived from the first 6 hex chars of the share token
+ * (cloud mode) or a deterministic 6-char hash of the itinerary id (local mode).
+ * Always lowercase hex so it's easy to type: e.g. "a3f1b9"
+ */
+export function extractShareCode(token: string): string {
+  // For cloud tokens (plain hex, 12 chars): take first 6
+  if (/^[0-9a-f]{12}$/.test(token)) return token.slice(0, 6);
+  // For compressed/local tokens: hash the token to a 6-char hex code
+  let hash = 0;
+  for (let i = 0; i < Math.min(token.length, 64); i++) {
+    hash = (Math.imul(31, hash) + token.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(16).padStart(6, '0').slice(0, 6);
+}
+
+/**
+ * Store share code → full token mapping in localStorage so code entry works on the same device.
+ */
+function cacheShareCode(code: string, token: string, allowEdit: boolean): void {
+  try {
+    localStorage.setItem(`planb_code_${code}`, JSON.stringify({ token, allowEdit }));
+  } catch { /* ignore */ }
+}
+
+/** Retrieve a cached share code mapping. */
+export function lookupShareCode(code: string): { token: string; allowEdit: boolean } | null {
+  try {
+    const raw = localStorage.getItem(`planb_code_${code.toLowerCase()}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as { token: string; allowEdit: boolean };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Create a share link for a trip — stores a snapshot of the itinerary in
  * `public.shared_trips` if configured, or returns a compact compressed URL
  * that fits in QR codes and works completely client-side.
+ *
+ * @param itinerary  The trip to share.
+ * @param allowEdit  If true, recipients can import the trip and edit it.
+ *                   If false (default), they can only view it read-only.
  */
-export async function createShareLink(itinerary: Itinerary): Promise<{ token: string; url: string; mode: 'cloud' | 'local' }> {
+export async function createShareLink(
+  itinerary: Itinerary,
+  allowEdit = false,
+): Promise<{ token: string; url: string; mode: 'cloud' | 'local'; shareCode: string; allowEdit: boolean }> {
   const base = window.location.origin;
 
   // Cache in localStorage for immediate same-device lookups
   try {
-    localStorage.setItem(`planb_share_${itinerary.id}`, JSON.stringify(itinerary));
+    localStorage.setItem(`planb_share_${itinerary.id}`, JSON.stringify({ itinerary, allowEdit }));
   } catch {
     // ignore quota errors
   }
@@ -317,10 +360,13 @@ export async function createShareLink(itinerary: Itinerary): Promise<{ token: st
         trip_id: itinerary.id,
         owner_id: user?.id ?? null,
         itinerary,
+        allow_edit: allowEdit,
       });
 
       if (!error) {
-        return { token: shareToken, url: `${base}/share/${shareToken}`, mode: 'cloud' };
+        const shareCode = extractShareCode(shareToken);
+        cacheShareCode(shareCode, shareToken, allowEdit);
+        return { token: shareToken, url: `${base}/share/${shareToken}`, mode: 'cloud', shareCode, allowEdit };
       }
       console.warn('[cloudTripStorage] Supabase insert into shared_trips skipped/failed, using compact client share link:', error?.message);
     } catch (err) {
@@ -330,7 +376,14 @@ export async function createShareLink(itinerary: Itinerary): Promise<{ token: st
 
   // Compact fallback: compress itinerary into URL so it fits QR codes without servers
   const token = await compressItinerary(itinerary);
-  return { token, url: `${base}/share/${token}`, mode: 'local' };
+  const shareCode = extractShareCode(token);
+  cacheShareCode(shareCode, token, allowEdit);
+  return { token, url: `${base}/share/${token}`, mode: 'local', shareCode, allowEdit };
+}
+
+export interface SharedTripResult {
+  itinerary: Itinerary;
+  allowEdit: boolean;
 }
 
 /**
@@ -338,21 +391,36 @@ export async function createShareLink(itinerary: Itinerary): Promise<{ token: st
  * Supports:
  * 1. Compact compressed tokens (prefixed "z_")
  * 2. Uncompressed local tokens (prefixed "local_")
- * 3. Local storage lookup
+ * 3. Local storage lookup (cached by itinerary id or token)
  * 4. Supabase cloud database
+ *
+ * Returns null if not found, otherwise { itinerary, allowEdit }.
  */
-export async function getSharedTrip(shareToken: string): Promise<Itinerary | null> {
+export async function getSharedTrip(shareToken: string): Promise<SharedTripResult | null> {
   // 1. Check local compressed or base64 token
   if (shareToken.startsWith('z_') || shareToken.startsWith('local_')) {
     const trip = await decompressItinerary(shareToken);
-    if (trip) return trip;
+    if (trip) {
+      // Look up allowEdit from localStorage cache
+      const shareCode = extractShareCode(shareToken);
+      const coded = lookupShareCode(shareCode);
+      const allowEdit = coded?.allowEdit ?? false;
+      return { itinerary: trip, allowEdit };
+    }
   }
 
-  // 2. Check localStorage cache
+  // 2. Check localStorage cache (keyed by itinerary id or token)
   try {
     const cached = localStorage.getItem(`planb_share_${shareToken}`);
     if (cached) {
-      return JSON.parse(cached) as Itinerary;
+      const parsed = JSON.parse(cached);
+      // Support old format (plain Itinerary) and new format ({ itinerary, allowEdit })
+      if (parsed && typeof parsed === 'object' && 'bookings' in parsed) {
+        return { itinerary: parsed as Itinerary, allowEdit: false };
+      }
+      if (parsed?.itinerary) {
+        return { itinerary: parsed.itinerary as Itinerary, allowEdit: parsed.allowEdit ?? false };
+      }
     }
   } catch {
     // ignore
@@ -363,15 +431,49 @@ export async function getSharedTrip(shareToken: string): Promise<Itinerary | nul
     try {
       const { data, error } = await supabase
         .from('shared_trips')
-        .select('itinerary')
+        .select('itinerary, allow_edit')
         .eq('share_token', shareToken)
         .maybeSingle();
 
       if (!error && data?.itinerary) {
-        return data.itinerary as Itinerary;
+        return { itinerary: data.itinerary as Itinerary, allowEdit: data.allow_edit ?? false };
       }
     } catch (err) {
       console.warn('[cloudTripStorage] getSharedTrip cloud lookup error:', err);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a 6-character hex share code to a full SharedTripResult.
+ * First tries localhost cache, then Supabase (prefix match on share_token).
+ */
+export async function getSharedTripByCode(code: string): Promise<SharedTripResult | null> {
+  const normalised = code.toLowerCase().trim();
+
+  // 1. Try localStorage code cache (written by createShareLink)
+  const cached = lookupShareCode(normalised);
+  if (cached) {
+    return getSharedTrip(cached.token);
+  }
+
+  // 2. Try Supabase prefix match
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('shared_trips')
+        .select('share_token, itinerary, allow_edit')
+        .ilike('share_token', `${normalised}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.itinerary) {
+        return { itinerary: data.itinerary as Itinerary, allowEdit: data.allow_edit ?? false };
+      }
+    } catch (err) {
+      console.warn('[cloudTripStorage] getSharedTripByCode cloud lookup error:', err);
     }
   }
 

@@ -83,15 +83,15 @@ function createWeatherMarker(
           width: 32px;
           height: 32px;
           border-radius: 50%;
-          background: ${isScenario ? '#1E293B' : '#0F172A'};
-          border: 2px solid ${color};
+          background: ${isScenario ? '#F1F5F9' : '#FFFFFF'};
+          border: 2.5px solid ${color};
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 14px;
           position: relative;
           z-index: 1;
-          box-shadow: 0 0 12px ${color}60;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 0 0 3px ${color}30;
         ">
           ${emoji}
         </div>
@@ -104,7 +104,7 @@ function createWeatherMarker(
             height: 14px;
             border-radius: 50%;
             background: ${color};
-            border: 1px solid #0F172A;
+            border: 1px solid #FFFFFF;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -142,13 +142,12 @@ export default function WeatherMapOverlay({
       zoomControl: false,
     });
 
-    // Light map tiles — CartoDB Positron (matches the app's light theme)
+    // Light map tiles — OpenStreetMap (free, no API key required)
     L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
       {
-        attribution: '© OpenStreetMap © CARTO',
-        subdomains: 'abcd',
-        maxZoom: 18,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
       }
     ).addTo(map);
 
@@ -266,14 +265,14 @@ export default function WeatherMapOverlay({
             <div style="font-size:10px;font-weight:bold;color:${riskToColor(riskScore)};margin-bottom:2px;">
               ${riskScore}% Weather Risk
             </div>
-            <div style="font-size:10px;color:#CBD5E1;">${impact.reason}</div>
+            <div style="font-size:10px;color:#374151;">${impact.reason}</div>
             <div style="display:flex;gap:8px;margin-top:4px;font-size:10px;">
-              <span style="color:#FCD34D;">Delay: ${Math.round(impact.probabilityOfDelay * 100)}%</span>
-              <span style="color:#F87171;">Cancel: ${Math.round(impact.probabilityOfCancellation * 100)}%</span>
+              <span style="color:#92400E;font-weight:600;">Delay: ${Math.round(impact.probabilityOfDelay * 100)}%</span>
+              <span style="color:#991B1B;font-weight:600;">Cancel: ${Math.round(impact.probabilityOfCancellation * 100)}%</span>
             </div>
           </div>
         `
-        : `<div style="margin-top:6px;font-size:10px;color:#4ADE80;">No significant weather impact</div>`;
+        : `<div style="margin-top:6px;font-size:10px;color:#065F46;font-weight:500;">No significant weather impact</div>`;
 
       marker.bindPopup(`
         <div style="
@@ -323,9 +322,9 @@ export default function WeatherMapOverlay({
           ],
           {
             color: lineColor,
-            weight: maxRisk > 30 ? 2.5 : 1.5,
-            opacity: maxRisk > 30 ? 0.6 : 0.3,
-            dashArray: maxRisk > 30 ? '6, 4' : '3, 6',
+            weight: maxRisk > 30 ? 4 : 3,
+            opacity: 1,
+            dashArray: maxRisk > 30 ? '8, 5' : '4, 7',
           }
         ).addTo(map);
 

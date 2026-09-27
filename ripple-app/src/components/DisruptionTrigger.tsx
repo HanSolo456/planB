@@ -10,6 +10,7 @@ import {
   Check,
   RotateCcw,
   Zap,
+  UserCheck2,
 } from 'lucide-react';
 
 interface Props {
@@ -23,10 +24,11 @@ const PRESET_DELAYS = [30, 45, 60, 90, 120, 180];
 export default function DisruptionTrigger({ booking, isSource, buttonClassName }: Props) {
   const { activeDisruptions, addDisruption, removeDisruption, hasCapacityForAnotherDisruption } = useAppState();
   const [isOpen, setIsOpen] = useState(false);
-  const [disruptionType, setDisruptionType] = useState<'delay' | 'cancellation'>('delay');
+  const [disruptionType, setDisruptionType] = useState<'delay' | 'cancellation' | 'traveler-change'>('delay');
   const [hours, setHours] = useState('1');
   const [mins, setMins] = useState('30');
   const [customReason, setCustomReason] = useState('');
+  const [travelerChangeReason, setTravelerChangeReason] = useState<Disruption['travelerChangeReason']>('date-change');
   const [capacityError, setCapacityError] = useState<string | null>(null);
 
   const totalMins = (parseInt(hours || '0', 10) * 60) + parseInt(mins || '0', 10);
@@ -50,11 +52,13 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
         setMins(String(activeDisruption.delayMinutes % 60));
       }
       setCustomReason(activeDisruption.reason ?? '');
+      setTravelerChangeReason(activeDisruption.travelerChangeReason ?? 'date-change');
     } else {
       setDisruptionType('delay');
       setHours('1');
       setMins('30');
       setCustomReason('');
+      setTravelerChangeReason('date-change');
     }
     setCapacityError(null);
     setIsOpen(true);
@@ -69,6 +73,8 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
     const defaultReason =
       disruptionType === 'delay'
         ? `${booking.provider} scheduled delay (+${totalMins}m)`
+        : disruptionType === 'traveler-change'
+        ? `Traveler-initiated change: ${travelerChangeReason ?? 'other'}`
         : `${booking.title} cancelled by carrier`;
 
     const disruption: Disruption = {
@@ -77,6 +83,7 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
       delayMinutes: disruptionType === 'delay' ? totalMins : undefined,
       reason: customReason.trim() || defaultReason,
       timestamp: new Date().toISOString(),
+      travelerChangeReason: disruptionType === 'traveler-change' ? travelerChangeReason : undefined,
     };
     addDisruption(disruption);
     setCapacityError(null);
@@ -111,6 +118,9 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
       const m = activeDisruption.delayMinutes ?? 0;
       const h = Math.floor(m / 60), rem = m % 60;
       return `${typeLabel} delayed +${h > 0 ? `${h}h ` : ''}${rem > 0 ? `${rem}m` : ''}`;
+    }
+    if (activeDisruption.disruptionType === 'traveler-change') {
+      return `${typeLabel} — my change`;
     }
     return `${typeLabel} cancelled`;
   };
@@ -214,35 +224,46 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
               <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 What happened?
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setDisruptionType('delay')}
-                  className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer border transition-all ${
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold cursor-pointer border transition-all ${
                     disruptionType === 'delay'
                       ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
                       : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  <Clock size={13} className="flex-shrink-0" />
+                  <Clock size={12} className="flex-shrink-0" />
                   <span>{delayLabel}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setDisruptionType('cancellation')}
-                  className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer border transition-all ${
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold cursor-pointer border transition-all ${
                     disruptionType === 'cancellation'
                       ? 'bg-rose-100 border-rose-300 text-rose-900 shadow-sm'
                       : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  <Ban size={13} className="flex-shrink-0" />
+                  <Ban size={12} className="flex-shrink-0" />
                   <span>{cancelLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDisruptionType('traveler-change')}
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-semibold cursor-pointer border transition-all ${
+                    disruptionType === 'traveler-change'
+                      ? 'bg-indigo-100 border-indigo-300 text-indigo-900 shadow-sm'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <UserCheck2 size={12} className="flex-shrink-0" />
+                  <span>I want to change it</span>
                 </button>
               </div>
             </div>
 
-            {/* Delay time picker */}
             {disruptionType === 'delay' ? (
               <div>
                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-3">
@@ -305,6 +326,38 @@ export default function DisruptionTrigger({ booking, isSource, buttonClassName }
                     </span>
                   </div>
                 </div>
+              </div>
+            ) : disruptionType === 'traveler-change' ? (
+              <div>
+                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  What kind of change?
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'date-change',       label: 'Change date / time' },
+                    { value: 'route-change',      label: 'Change route / destination' },
+                    { value: 'seat-upgrade',      label: 'Seat or class upgrade' },
+                    { value: 'cancel-voluntary',  label: 'Voluntarily cancel' },
+                    { value: 'add-segment',       label: 'Add a new leg' },
+                    { value: 'other',             label: 'Other personal change' },
+                  ] as const).map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setTravelerChangeReason(value)}
+                      className={`text-left px-3 py-2.5 rounded-xl text-xs font-medium cursor-pointer border transition-all ${
+                        travelerChangeReason === value
+                          ? 'bg-indigo-100 border-indigo-300 text-indigo-900 shadow-sm'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 text-[11px] text-indigo-700 leading-relaxed bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2.5">
+                  We'll calculate your refund eligibility and show options that account for change fees and cutoff timing.
+                </p>
               </div>
             ) : (
               <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-rose-50 border border-rose-100">

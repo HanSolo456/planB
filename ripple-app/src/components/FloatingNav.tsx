@@ -1,13 +1,12 @@
 // =============================================================================
 // planB — Travel Disruption Recovery Platform
 // FILE: FloatingNav.tsx
-// PURPOSE: Minimal floating nav for pages that don't need a full header
-//   (import, profile). Two small frosted-glass pill buttons: ← Back (left)
-//   and Profile (right). Stays out of the way of page content.
+// PURPOSE: Minimal floating nav for pages. Two small frosted-glass pill buttons:
+//   ← Back (left) and Simulate Disruption / Profile (right).
 // =============================================================================
 
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, User } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ChevronLeft, User, Zap } from 'lucide-react';
 import { useAppState } from '../App';
 
 interface Props {
@@ -15,7 +14,11 @@ interface Props {
   backTo?: string;
   /** Override the back label */
   backLabel?: string;
-  /** Hide the profile button (e.g. on the profile page itself) */
+  /** Right button action: 'simulate' (on trip views), 'profile' (on other pages), or 'none' */
+  rightAction?: 'simulate' | 'profile' | 'none';
+  /** Optional custom callback when simulate is clicked */
+  onSimulate?: () => void;
+  /** Hide the right button */
   hideProfile?: boolean;
 }
 
@@ -25,9 +28,26 @@ const pillBase = `
   backdrop-blur-sm
 `.trim();
 
-export default function FloatingNav({ backTo = '/app/dashboard', backLabel = 'Back', hideProfile = false }: Props) {
+export default function FloatingNav({
+  backTo = '/app/dashboard',
+  backLabel = 'Back',
+  rightAction = 'profile',
+  onSimulate,
+  hideProfile = false,
+}: Props) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser, openAuthModal } = useAppState();
+
+  const handleSimulateClick = () => {
+    if (onSimulate) {
+      onSimulate();
+      return;
+    }
+    const search = new URLSearchParams(location.search);
+    search.set('simulate', 'true');
+    navigate(`${location.pathname}?${search.toString()}`);
+  };
 
   return (
     <div className="fixed top-4 inset-x-0 z-50 flex items-center justify-between px-4 sm:px-6 pointer-events-none">
@@ -36,7 +56,7 @@ export default function FloatingNav({ backTo = '/app/dashboard', backLabel = 'Ba
         onClick={() => navigate(backTo)}
         className={pillBase}
         style={{
-          backgroundColor: 'rgba(255,255,255,0.82)',
+          backgroundColor: 'rgba(255,255,255,0.85)',
           borderColor: 'var(--color-border)',
           color: 'var(--color-text-muted)',
           pointerEvents: 'auto',
@@ -52,15 +72,47 @@ export default function FloatingNav({ backTo = '/app/dashboard', backLabel = 'Ba
           const b = e.currentTarget as HTMLButtonElement;
           b.style.borderColor = 'var(--color-border)';
           b.style.color = 'var(--color-text-muted)';
-          b.style.backgroundColor = 'rgba(255,255,255,0.82)';
+          b.style.backgroundColor = 'rgba(255,255,255,0.85)';
         }}
       >
         <ChevronLeft size={13} />
         {backLabel}
       </button>
 
-      {/* Profile / Sign in */}
-      {!hideProfile && (
+      {/* Right button: Simulate Disruption (on trip pages) */}
+      {!hideProfile && rightAction === 'simulate' && (
+        <button
+          onClick={handleSimulateClick}
+          className={pillBase}
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            borderColor: 'rgba(217, 119, 6, 0.45)',
+            color: '#B45309',
+            pointerEvents: 'auto',
+            boxShadow: '0 2px 10px rgba(217, 119, 6, 0.14)',
+          }}
+          onMouseEnter={(e) => {
+            const b = e.currentTarget as HTMLButtonElement;
+            b.style.borderColor = '#D97706';
+            b.style.color = '#78350F';
+            b.style.backgroundColor = 'rgba(254, 243, 199, 0.95)';
+          }}
+          onMouseLeave={(e) => {
+            const b = e.currentTarget as HTMLButtonElement;
+            b.style.borderColor = 'rgba(217, 119, 6, 0.45)';
+            b.style.color = '#B45309';
+            b.style.backgroundColor = 'rgba(255,255,255,0.92)';
+          }}
+          id="btn-simulate-disruption-header"
+          title="Simulate Disruption"
+        >
+          <Zap size={13} className="text-amber-500 fill-amber-500" />
+          <span>Simulate Disruption</span>
+        </button>
+      )}
+
+      {/* Right button: Profile / Sign in (when rightAction === 'profile') */}
+      {!hideProfile && rightAction === 'profile' && (
         currentUser ? (
           <button
             onClick={() => navigate('/app/profile')}
@@ -120,3 +172,4 @@ export default function FloatingNav({ backTo = '/app/dashboard', backLabel = 'Ba
     </div>
   );
 }
+

@@ -1,12 +1,15 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Itinerary, Booking, ImpactedBooking, Disruption } from '../lib/types';
 import { getAtRiskConnections, calculateTripRiskScore, detectCombinedImpact } from '../lib/impactEngine';
 import { useAppState } from '../App';
+import MobileBottomNav, { type MobileTabKey } from './MobileBottomNav';
 import ItineraryCard from './ItineraryCard';
 import DisruptionBanner from './DisruptionBanner';
 import TimelineView from './TimelineView';
-import MapView from './MapView';
+// MapView pulls in leaflet (~200 KB) — lazy-load it so the map bundle only
+// downloads when the user actually switches to the Map tab.
+const MapView = lazy(() => import('./MapView'));
 import SelectedBookingDetailCard from './SelectedBookingDetailCard';
 import { useWikipediaImage } from '../lib/useWikipediaImage';
 import { parseDisruptionFromText } from '../lib/nlDisruptionEngine';
@@ -43,6 +46,33 @@ import {
 
 interface Props {
   itinerary: Itinerary;
+}
+
+const LOCAL_DESTINATION_IMAGES: Array<{ keywords: string[]; src: string }> = [
+  { keywords: ['london', 'uk', 'england', 'britain'], src: '/London-2048x1506.png' },
+  { keywords: ['paris', 'france'], src: '/Paris-2048x1506.png' },
+  { keywords: ['san francisco', 'sf', 'california', 'bay area'], src: '/San Francisco-2048x1506.png' },
+  { keywords: ['sydney', 'australia'], src: '/Sydney-2048x1506.png' },
+  { keywords: ['goa'], src: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=1600&q=80' },
+];
+
+function getLocalDestinationImage(destination: string): string | null {
+  const lower = destination.toLowerCase();
+  const match = LOCAL_DESTINATION_IMAGES.find(({ keywords }) =>
+    keywords.some((kw) => lower.includes(kw))
+  );
+  return match ? match.src : null;
+}
+
+function formatDateRange(start: string, end: string): string {
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    return `${s.toLocaleDateString('en-US', opts)} – ${e.toLocaleDateString('en-US', opts)}, ${e.getFullYear()}`;
+  } catch {
+    return `${start} – ${end}`;
+  }
 }
 
 const CATEGORY_PILLS = [
@@ -193,7 +223,15 @@ function SimulateDisruptionRow({
 
 export default function ItineraryView({ itinerary }: Props) {
   const navigate = useNavigate();
-  const [view, setView] = useState<'itinerary' | 'timeline' | 'map'>('timeline');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialView = useMemo(() => {
+    const p = searchParams.get('view');
+    if (p === 'itinerary' || p === 'timeline' || p === 'map') return p;
+    return 'itinerary';
+  }, []);
+
+  const [view, setView] = useState<'itinerary' | 'timeline' | 'map'>(initialView);
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedBookingId, setSelectedBookingId] = useState<string>('bkg-flight-1');
 
@@ -218,10 +256,13 @@ export default function ItineraryView({ itinerary }: Props) {
   const [shareModal, setShareModal] = useState(false);
   const [shareTab, setShareTab] = useState<'link' | 'qr'>('link');
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareCodeCopied, setShareCodeCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [shareAllowEdit, setShareAllowEdit] = useState(false);
 
   // ---------------------------------------------------------------------------
   // EDIT TRIP MODAL STATE
@@ -229,14 +270,56 @@ export default function ItineraryView({ itinerary }: Props) {
   const [editTripModal, setEditTripModal] = useState(false);
   const [simulateModal, setSimulateModal] = useState(false);
 
+  // Sync view and simulate query parameters from URL
+  useEffect(() => {
+    const p = searchParams.get('view');
+    if (p === 'itinerary' || p === 'timeline' || p === 'map') {
+      setView(p);
+    }
+    if (searchParams.get('simulate') === 'true') {
+      setSimulateModal(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('simulate');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleViewChange = useCallback(
+    (newView: 'itinerary' | 'timeline' | 'map') => {
+      setView(newView);
+      const next = new URLSearchParams(searchParams);
+      next.set('view', newView);
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const activeBottomTab: MobileTabKey = useMemo(() => {
+    return view;
+  }, [view]);
+
+  const handleBottomNavSelect = useCallback(
+    (tab: MobileTabKey) => {
+      if (tab === 'itinerary' || tab === 'timeline' || tab === 'map') {
+        handleViewChange(tab);
+      } else if (tab === 'twin') {
+        navigate(`/app/twin/${itinerary.id}`);
+      } else if (tab === 'profile') {
+        navigate('/app/profile');
+      }
+    },
+    [handleViewChange, navigate, itinerary.id]
+  );
+
   // Lock body scroll when modal is open
   useEffect(() => {
-    if (simulateModal) {
+    const anyOpen = simulateModal || shareModal || editTripModal;
+    if (anyOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
     }
-  }, [simulateModal]);
+  }, [simulateModal, shareModal, editTripModal]);
 
   // ---------------------------------------------------------------------------
   // QUICK ACTIONS NATURAL LANGUAGE INPUT
@@ -245,10 +328,14 @@ export default function ItineraryView({ itinerary }: Props) {
   const [quickLoading, setQuickLoading] = useState(false);
   const [quickError, setQuickError] = useState<string | null>(null);
 
-  // Fetch Wikipedia Hero Banner Image — same query the dashboard card uses
-  // so the image is already cached and renders instantly when you tap into the trip.
+  // Fetch destination image: local curated image (e.g. Goa, London, Paris, SF, Sydney) or Wikipedia REST
   const heroQuery = itinerary.destination.split(',')[0].trim();
-  const heroWikiImage = useWikipediaImage(heroQuery);
+  const localHeroImage = useMemo(
+    () => getLocalDestinationImage(itinerary.destination),
+    [itinerary.destination]
+  );
+  const heroWikiImage = useWikipediaImage(localHeroImage ? '' : heroQuery);
+  const heroImage = localHeroImage || heroWikiImage || null;
 
   // Compute effective impacted bookings
   const effectiveImpactedBookings = useMemo(() => {
@@ -332,8 +419,9 @@ export default function ItineraryView({ itinerary }: Props) {
     setShareLoading(true);
     setShareError(null);
     try {
-      const result = await createShareLink(itinerary);
+      const result = await createShareLink(itinerary, shareAllowEdit);
       setShareUrl(result.url);
+      setShareCode(result.shareCode);
       QRCode.toDataURL(result.url, {
         width: 260,
         margin: 2,
@@ -348,7 +436,17 @@ export default function ItineraryView({ itinerary }: Props) {
     } finally {
       setShareLoading(false);
     }
-  }, [itinerary, shareUrl]);
+  }, [itinerary, shareUrl, shareAllowEdit]);
+
+  // When the allow-edit toggle flips AFTER a link was generated, regenerate it
+  const handleToggleAllowEdit = useCallback((next: boolean) => {
+    setShareAllowEdit(next);
+    // Reset cached link so it regenerates with the new flag on next open/request
+    setShareUrl(null);
+    setShareCode(null);
+    setQrDataUrl(null);
+    setShareError(null);
+  }, []);
 
   // Handle Natural Language Disruption Submit
   const handleQuickSubmit = async (queryText?: string) => {
@@ -413,7 +511,7 @@ export default function ItineraryView({ itinerary }: Props) {
   };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-6 pb-24 lg:pb-8">
       {/* Recovery Success Notification */}
       {recoverySuccessMessage && (
         <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 flex items-start justify-between gap-3 shadow-xs">
@@ -494,41 +592,56 @@ export default function ItineraryView({ itinerary }: Props) {
         {/* LEFT COLUMN: Hero Banner + Toolbar + Active View */}
         <div className={`${view === 'map' ? 'lg:col-span-12' : 'lg:col-span-8'} min-w-0 space-y-4`}>
           {/* Destination Hero Banner */}
-          <div className="relative rounded-2xl overflow-hidden min-h-[190px] sm:min-h-[210px] p-5 sm:p-6 flex flex-col justify-between text-white shadow-sm border border-black/10">
-            {/* Background Wikipedia Destination Image */}
-            {heroWikiImage ? (
+          <div className="relative rounded-2xl overflow-hidden min-h-[190px] sm:min-h-[210px] p-5 sm:p-6 flex flex-col justify-between text-white shadow-md border border-black/10 isolate bg-[#0F172A]">
+            {/* Background Destination Photo */}
+            {heroImage ? (
               <img
-                src={heroWikiImage}
+                src={heroImage}
                 alt={itinerary.destination}
-                className="absolute inset-0 w-full h-full object-cover -z-10"
+                className="absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-700"
               />
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900 -z-10" />
+              <div
+                className="absolute inset-0 z-0"
+                style={{
+                  background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%)',
+                }}
+              />
             )}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/30 -z-10" />
+            {/* Dark Scrim overlay so white text & badges are always razor-sharp */}
+            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/35 z-[1]" />
 
             {/* Top row: Title, Subtitle, Edit Trip Button */}
-            <div className="flex items-start justify-between gap-4">
+            <div className="relative z-10 flex items-start justify-between gap-4">
               <div>
                 <h1 className="font-display font-bold text-2xl sm:text-3xl text-white tracking-tight">
                   {itinerary.destination}
                 </h1>
                 <p className="text-xs sm:text-sm text-white/90 font-medium mt-1">
-                  Nov 14 – Nov 17, 2025 · {itinerary.bookings.length} bookings
+                  {formatDateRange(itinerary.startDate, itinerary.endDate)} · {itinerary.bookings.length} bookings
                 </p>
               </div>
 
-              <button
-                onClick={() => setEditTripModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 border border-white/20 text-white text-xs font-medium backdrop-blur-md transition-all cursor-pointer shadow-xs"
-              >
-                <Pencil size={12} />
-                <span>Edit Trip</span>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleShare}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 border border-white/20 text-white text-xs font-medium backdrop-blur-md transition-all cursor-pointer shadow-xs"
+                >
+                  <Share2 size={12} />
+                  <span>Share</span>
+                </button>
+                <button
+                  onClick={() => setEditTripModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 border border-white/20 text-white text-xs font-medium backdrop-blur-md transition-all cursor-pointer shadow-xs"
+                >
+                  <Pencil size={12} />
+                  <span>Edit Trip</span>
+                </button>
+              </div>
             </div>
 
             {/* Bottom row: Category Filter Pills */}
-            <div className="flex items-center gap-3 pt-4 flex-wrap">
+            <div className="relative z-10 flex items-center gap-3 pt-4 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 {CATEGORY_PILLS.map((pill) => {
                   const active = filterType === pill.type;
@@ -558,12 +671,70 @@ export default function ItineraryView({ itinerary }: Props) {
             </div>
           </div>
 
-          {/* Toolbar / Tab Switcher */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {/* View tabs */}
+          {/* Mobile Trip Health & Resilience Card (Shows first on phone) */}
+          <div className="lg:hidden bg-white rounded-2xl border border-gray-200/90 p-4 shadow-xs">
+            {/* Top Header */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-gray-900 font-bold text-sm">
+                <div className="w-6 h-6 rounded-md bg-blue-50 text-blue-700 flex items-center justify-center">
+                  <ShieldCheck size={15} />
+                </div>
+                <span>Trip Health Score</span>
+              </div>
+
+              <div
+                className={`px-2.5 py-0.5 rounded-full text-2xs font-mono font-bold tracking-wider uppercase flex items-center gap-1.5 ${
+                  healthStatus === 'on-track'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : healthStatus === 'at-risk'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    healthStatus === 'on-track'
+                      ? 'bg-emerald-500'
+                      : healthStatus === 'at-risk'
+                      ? 'bg-amber-500'
+                      : 'bg-rose-500'
+                  }`}
+                />
+                <span>{healthStatus === 'on-track' ? 'ON TRACK' : healthStatus === 'at-risk' ? 'AT RISK' : 'DISRUPTED'}</span>
+              </div>
+            </div>
+
+            {/* Score & Progress Bar */}
+            <div className="my-2.5 flex items-center justify-between gap-4">
+              <div className="flex items-baseline gap-1">
+                <span className="font-display font-black text-3xl text-gray-900 leading-none font-mono">
+                  {healthScore}
+                </span>
+                <span className="text-xs font-medium text-gray-400 font-mono">/100</span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="flex-1 max-w-[170px] h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500 bg-emerald-500"
+                  style={{ width: `${healthScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Footer note */}
+            <div className="flex items-center justify-between text-2xs text-gray-500 pt-2 border-t border-gray-100">
+              <span>Schedule buffers are well-calibrated.</span>
+              <span className="font-mono text-gray-400 font-medium">0 active conflicts</span>
+            </div>
+          </div>
+
+          {/* Toolbar / Tab Switcher (Desktop only — mobile uses floating MobileBottomNav and hero banner actions) */}
+          <div className="hidden lg:flex items-center justify-between gap-3">
+            {/* View tabs — shown on desktop */}
             <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-gray-200/90 shadow-2xs">
               <button
-                onClick={() => setView('itinerary')}
+                onClick={() => handleViewChange('itinerary')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                   view === 'itinerary'
                     ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
@@ -574,7 +745,7 @@ export default function ItineraryView({ itinerary }: Props) {
                 <span>Itinerary</span>
               </button>
               <button
-                onClick={() => setView('timeline')}
+                onClick={() => handleViewChange('timeline')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                   view === 'timeline'
                     ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
@@ -585,7 +756,7 @@ export default function ItineraryView({ itinerary }: Props) {
                 <span>Timeline</span>
               </button>
               <button
-                onClick={() => setView('map')}
+                onClick={() => handleViewChange('map')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                   view === 'map'
                     ? 'bg-[#EBF3FF] text-[#1D4ED8] shadow-2xs'
@@ -597,8 +768,8 @@ export default function ItineraryView({ itinerary }: Props) {
               </button>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2">
+            {/* Desktop Actions */}
+            <div className="flex items-center gap-2 justify-end">
               <button
                 onClick={handleShare}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-gray-700 text-xs font-medium cursor-pointer shadow-2xs transition-all"
@@ -637,6 +808,7 @@ export default function ItineraryView({ itinerary }: Props) {
               activeDisruptions={activeDisruptions}
               impactedMap={impactedMap}
               atRiskByBookingId={atRiskByBookingId}
+              onReportDisruption={() => setSimulateModal(true)}
             />
           )}
 
@@ -677,14 +849,23 @@ export default function ItineraryView({ itinerary }: Props) {
 
           {/* VIEW 3: Map View (OpenStreetMap with Interactive Waypoints matching screenshot) */}
           {view === 'map' && (
-            <MapView
-              itinerary={itinerary}
-              sortedBookings={filteredBookings}
-              selectedBookingId={selectedBookingId}
-              onSelectBooking={setSelectedBookingId}
-              activeDisruptions={activeDisruptions}
-              impactedMap={impactedMap}
-            />
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-96">
+                <div
+                  className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+                  style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
+                />
+              </div>
+            }>
+              <MapView
+                itinerary={itinerary}
+                sortedBookings={filteredBookings}
+                selectedBookingId={selectedBookingId}
+                onSelectBooking={setSelectedBookingId}
+                activeDisruptions={activeDisruptions}
+                impactedMap={impactedMap}
+              />
+            </Suspense>
           )}
         </div>
 
@@ -694,26 +875,28 @@ export default function ItineraryView({ itinerary }: Props) {
           {view === 'timeline' ? (
             /* Selected Booking Detail Card starting at the top, aligned with Hero Banner */
             selectedBooking && (
-              <SelectedBookingDetailCard
-                booking={selectedBooking}
-                itinerary={itinerary}
-                onReportDisruption={() => setSimulateModal(true)}
-                isDisrupted={
-                  activeDisruptions.some((d) => d.bookingId === selectedBooking.id) ||
-                  impactedMap.get(selectedBooking.id)?.severity === 'broken'
-                }
-                isAtRisk={
-                  selectedBooking.status === 'at-risk' ||
-                  impactedMap.get(selectedBooking.id)?.severity === 'at-risk' ||
-                  (atRiskByBookingId.get(selectedBooking.id)?.length ?? 0) > 0
-                }
-              />
+              <div id="selected-booking-detail" className="scroll-mt-24">
+                <SelectedBookingDetailCard
+                  booking={selectedBooking}
+                  itinerary={itinerary}
+                  onReportDisruption={() => setSimulateModal(true)}
+                  isDisrupted={
+                    activeDisruptions.some((d) => d.bookingId === selectedBooking.id) ||
+                    impactedMap.get(selectedBooking.id)?.severity === 'broken'
+                  }
+                  isAtRisk={
+                    selectedBooking.status === 'at-risk' ||
+                    impactedMap.get(selectedBooking.id)?.severity === 'at-risk' ||
+                    (atRiskByBookingId.get(selectedBooking.id)?.length ?? 0) > 0
+                  }
+                />
+              </div>
             )
           ) : (
             /* Itinerary & Map View Sidebar: Trip Health + Quick Actions + Possible Impacts */
             <>
-              {/* Trip Health Card */}
-              <div className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs flex flex-col justify-between">
+              {/* Trip Health Card (Desktop Sidebar) */}
+              <div className="hidden lg:flex bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs flex-col justify-between">
                 {/* Top Header */}
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-gray-900 font-bold text-base">
@@ -1028,7 +1211,7 @@ export default function ItineraryView({ itinerary }: Props) {
                       Share Itinerary
                     </h3>
                     <p className="text-xs text-gray-500">
-                      Public live link and QR code for co-travelers
+                      Live link · QR code · 6-digit code for co-travelers
                     </p>
                   </div>
                 </div>
@@ -1040,8 +1223,35 @@ export default function ItineraryView({ itinerary }: Props) {
                 </button>
               </div>
 
+              {/* Allow-edit toggle — sits above the tab bar so it's always visible */}
+              <div className="px-6 pt-4 pb-1 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-gray-800">Allow editing</span>
+                  <span className="text-2xs text-gray-400">
+                    {shareAllowEdit
+                      ? 'Recipients can import and edit this trip'
+                      : 'Recipients can only view this trip'}
+                  </span>
+                </div>
+                {/* Toggle switch */}
+                <button
+                  role="switch"
+                  aria-checked={shareAllowEdit}
+                  onClick={() => handleToggleAllowEdit(!shareAllowEdit)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
+                    shareAllowEdit ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                      shareAllowEdit ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
               {/* Tabs */}
-              <div className="px-6 pt-4 flex gap-2">
+              <div className="px-6 pt-3 flex gap-2">
                 <button
                   onClick={() => setShareTab('link')}
                   className={`flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
@@ -1076,6 +1286,7 @@ export default function ItineraryView({ itinerary }: Props) {
                   <div className="py-4 text-center text-xs text-rose-600">{shareError}</div>
                 ) : shareTab === 'link' ? (
                   <div className="space-y-3">
+                    {/* Full URL row */}
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
@@ -1097,8 +1308,36 @@ export default function ItineraryView({ itinerary }: Props) {
                         <span>{shareCopied ? 'Copied!' : 'Copy'}</span>
                       </button>
                     </div>
+
+                    {/* 6-digit share code */}
+                    {shareCode && (
+                      <div className="flex items-center gap-3 px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                        <div className="flex-1">
+                          <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">
+                            6-digit code
+                          </p>
+                          <p className="font-mono font-bold text-lg tracking-[0.25em] text-gray-900 uppercase">
+                            {shareCode}
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(shareCode);
+                            setShareCodeCopied(true);
+                            setTimeout(() => setShareCodeCopied(false), 2000);
+                          }}
+                          className="px-3 py-2 bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Copy size={12} />
+                          <span>{shareCodeCopied ? 'Copied!' : 'Copy code'}</span>
+                        </button>
+                      </div>
+                    )}
+
                     <p className="text-2xs text-gray-500">
-                      Anyone with this link can view this itinerary and real-time status in read-only mode.
+                      {shareAllowEdit
+                        ? 'Anyone with this link or code can import and edit this trip.'
+                        : 'Anyone with this link or code can view this itinerary in read-only mode.'}
                     </p>
                   </div>
                 ) : (
@@ -1108,8 +1347,15 @@ export default function ItineraryView({ itinerary }: Props) {
                         <img src={qrDataUrl} alt="Trip QR Code" className="w-48 h-48" />
                       </div>
                     )}
+                    {/* Show code below QR too */}
+                    {shareCode && (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl">
+                        <span className="text-2xs text-gray-400 font-semibold uppercase tracking-wide">Code</span>
+                        <span className="font-mono font-bold text-base tracking-[0.2em] text-gray-900 uppercase">{shareCode}</span>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500 text-center">
-                      Scan with your smartphone camera to open on mobile
+                      Scan with your smartphone camera, or enter the code in the import screen
                     </p>
                   </div>
                 )}
@@ -1254,6 +1500,13 @@ export default function ItineraryView({ itinerary }: Props) {
           </div>,
           document.body
         )}
+
+      {/* Mobile Bottom Navigation Bar replicating user reference */}
+      <MobileBottomNav
+        activeTab={activeBottomTab}
+        onTabSelect={handleBottomNavSelect}
+        disruptionCount={activeDisruptions.length}
+      />
     </div>
   );
 }

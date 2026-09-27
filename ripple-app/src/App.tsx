@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, createContext, useContext, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, createContext, useContext, useEffect, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import PageTransition, { pageScope } from './components/PageTransition';
@@ -9,17 +9,35 @@ import { SEED_IDS, SEED_ITINERARIES, goaSaumitraTrip } from './lib/seedData';
 import * as localTripStorage from './lib/tripStorage';
 import * as cloudTripStorage from './lib/cloudTripStorage';
 import { supabase } from './lib/supabase';
+// FloatingNav and CustomCursor are always-visible chrome — keep them eager
 import FloatingNav from './components/FloatingNav';
-import ItineraryView from './components/ItineraryView';
-import RecoveryView from './components/RecoveryView';
-import TripDashboard from './components/TripDashboard';
-import ImportView from './components/ImportView';
-import LandingPage from './components/LandingPage';
-import LoginPage from './components/LoginPage';
-import ProfilePanel from './components/ProfilePanel';
 import CustomCursor from './components/CustomCursor';
-import SharedTripView from './components/SharedTripView';
-import DigitalTwinView from './components/DigitalTwinView';
+
+// ---------------------------------------------------------------------------
+// Route-level code splitting — each page is a separate JS chunk that only
+// downloads when the user actually navigates to that route.
+// ---------------------------------------------------------------------------
+const LandingPage    = lazy(() => import('./components/LandingPage'));
+const LoginPage      = lazy(() => import('./components/LoginPage'));
+const TripDashboard  = lazy(() => import('./components/TripDashboard'));
+const ItineraryView  = lazy(() => import('./components/ItineraryView'));
+const RecoveryView   = lazy(() => import('./components/RecoveryView'));
+const ImportView     = lazy(() => import('./components/ImportView'));
+const ProfilePanel   = lazy(() => import('./components/ProfilePanel'));
+const SharedTripView = lazy(() => import('./components/SharedTripView'));
+const DigitalTwinView = lazy(() => import('./components/DigitalTwinView'));
+
+// Minimal spinner shown while a lazy chunk is downloading
+function RouteSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-base)' }}>
+      <div
+        className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+        style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
+      />
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // App-level state shape
@@ -100,6 +118,13 @@ export interface AppState {
   recoverySuccessMessage: string | null;
   clearRecoverySuccess: () => void;
 
+  /** Transfer simulated weather disruption into Plan B active recovery */
+  applyWeatherDisruptionToItinerary: (
+    it: Itinerary,
+    disruptions: Disruption | Disruption[],
+    openRecovery?: boolean
+  ) => void;
+
   // Import + persistence
   addImportedItinerary: (it: Itinerary) => void;
   removeImportedItinerary: (id: string) => void;
@@ -160,9 +185,11 @@ function TripRouteWrapper() {
   useEffect(() => {
     if (foundTrip && lastSyncedTripId.current !== tripId) {
       lastSyncedTripId.current = tripId ?? null;
-      setSelectedItinerary(foundTrip);
+      if (!selectedItinerary || selectedItinerary.id !== foundTrip.id) {
+        setSelectedItinerary(foundTrip);
+      }
     }
-  }, [foundTrip, tripId, setSelectedItinerary]);
+  }, [foundTrip, tripId, selectedItinerary]);
 
   // Reset the ref when tripId changes (e.g. navigating between different trips)
   useEffect(() => {
@@ -200,14 +227,20 @@ function TripRouteWrapper() {
 // ---------------------------------------------------------------------------
 function DashboardLayout() {
   const location = useLocation();
+  const { selectedItinerary } = useAppState();
 
+  const isTwin = location.pathname.startsWith('/app/twin/');
+  const twinTripId = isTwin ? location.pathname.split('/app/twin/')[1] : null;
+  const isRecovery = location.pathname.startsWith('/app/recovery');
   const isTrip =
-    location.pathname.startsWith('/app/trip/') ||
-    location.pathname.startsWith('/app/recovery');
+    location.pathname.startsWith('/app/trip/');
   const isDashboard =
     location.pathname === '/app/dashboard' || location.pathname === '/app/dashboard/';
   const isImport = location.pathname === '/app/import';
   const isProfile = location.pathname === '/app/profile';
+
+  const recoveryBackTo = selectedItinerary ? `/app/trip/${selectedItinerary.id}` : '/app/dashboard';
+  const recoveryBackLabel = selectedItinerary ? 'Back to trip' : 'All trips';
 
   return (
     <div
@@ -217,10 +250,18 @@ function DashboardLayout() {
         color: 'var(--color-text-main)',
       }}
     >
-      {/* Floating pill nav on trip, import and profile — minimal, non-intrusive */}
-      {isTrip && <FloatingNav backLabel="All trips" backTo="/app/dashboard" />}
-      {isImport && <FloatingNav backLabel="Back" />}
-      {isProfile && <FloatingNav backLabel="All trips" hideProfile />}
+      {/* Floating pill nav on trip, twin, import and profile — minimal, consistent */}
+      {isTrip && <FloatingNav backLabel="All trips" backTo="/app/dashboard" rightAction="simulate" />}
+      {isRecovery && <FloatingNav backLabel={recoveryBackLabel} backTo={recoveryBackTo} rightAction="simulate" />}
+      {isTwin && (
+        <FloatingNav
+          backLabel="Trip view"
+          backTo={twinTripId ? `/app/trip/${twinTripId}` : '/app/dashboard'}
+          rightAction="none"
+        />
+      )}
+      {isImport && <FloatingNav backLabel="Back" rightAction="profile" />}
+      {isProfile && <FloatingNav backLabel="All trips" backTo="/app/dashboard" rightAction="simulate" />}
 
       <main
         className={`max-w-screen-2xl mx-auto pb-6 md:pb-8 ${
@@ -231,20 +272,22 @@ function DashboardLayout() {
             : 'px-4 sm:px-6 md:px-8 pt-16'
         }`}
       >
-        <AnimatePresence mode="wait" initial={false}>
-          <PageTransition key={location.pathname} variant="nested">
-            <Routes location={location}>
-              <Route path="dashboard" element={<TripDashboard />} />
-              <Route path="trip/:tripId" element={<TripRouteWrapper />} />
-              <Route path="dashboard/:tripId" element={<TripRouteWrapper />} />
-              <Route path="import" element={<ImportView />} />
-              <Route path="recovery" element={<RecoveryView />} />
-              <Route path="profile" element={<ProfilePanel />} />
-              <Route path="twin/:tripId" element={<DigitalTwinView />} />
-              <Route path="*" element={<Navigate to="dashboard" replace />} />
-            </Routes>
-          </PageTransition>
-        </AnimatePresence>
+        <Suspense fallback={<RouteSpinner />}>
+          <AnimatePresence mode="wait" initial={false}>
+            <PageTransition key={location.pathname} variant="nested">
+              <Routes location={location}>
+                <Route path="dashboard" element={<TripDashboard />} />
+                <Route path="trip/:tripId" element={<TripRouteWrapper />} />
+                <Route path="dashboard/:tripId" element={<TripRouteWrapper />} />
+                <Route path="import" element={<ImportView />} />
+                <Route path="recovery" element={<RecoveryView />} />
+                <Route path="profile" element={<ProfilePanel />} />
+                <Route path="twin/:tripId" element={<DigitalTwinView />} />
+                <Route path="*" element={<Navigate to="dashboard" replace />} />
+              </Routes>
+            </PageTransition>
+          </AnimatePresence>
+        </Suspense>
       </main>
     </div>
   );
@@ -455,10 +498,14 @@ export default function App() {
   // Trip management
   // ---------------------------------------------------------------------------
   const setSelectedItinerary = useCallback((it: Itinerary) => {
-    setSelectedItineraryState(it);
-    setActiveDisruptions([]);
-    setRecoveryTargetDisruptionState(null);
-    setShowRecoveryOptionsState(false);
+    setSelectedItineraryState((prev) => {
+      if (prev?.id !== it.id) {
+        setActiveDisruptions([]);
+        setRecoveryTargetDisruptionState(null);
+        setShowRecoveryOptionsState(false);
+      }
+      return it;
+    });
     setRecoverySuccessMessage(null);
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     if (!SEED_IDS.has(it.id)) {
@@ -472,6 +519,30 @@ export default function App() {
     }
     navigate(`/app/trip/${it.id}`);
   }, [currentUser, navigate]);
+
+  const applyWeatherDisruptionToItinerary = useCallback(
+    (
+      targetItinerary: Itinerary,
+      disruptions: Disruption | Disruption[],
+      openRecovery: boolean = true
+    ) => {
+      const disruptionList = Array.isArray(disruptions) ? disruptions : [disruptions];
+      if (disruptionList.length === 0) return;
+
+      setSelectedItineraryState(targetItinerary);
+      setActiveDisruptions(disruptionList);
+      setRecoveryTargetDisruptionState(disruptionList[0]);
+      setShowRecoveryOptionsState(openRecovery);
+      setRecoverySuccessMessage(null);
+
+      if (openRecovery) {
+        navigate('/app/recovery');
+      } else {
+        navigate(`/app/trip/${targetItinerary.id}`);
+      }
+    },
+    [navigate]
+  );
 
   const clearSelectedItinerary = useCallback(() => {
     setSelectedItineraryState(null);
@@ -620,74 +691,77 @@ export default function App() {
         applyRecovery,
         recoverySuccessMessage,
         clearRecoverySuccess,
+        applyWeatherDisruptionToItinerary,
         addImportedItinerary,
         removeImportedItinerary,
         isSeedTrip,
       }}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        <PageTransition
-          key={pageScope(location.pathname)}
-          variant={location.pathname === '/login' ? 'login' : 'page'}
-        >
-          <Routes location={location}>
-            <Route
-              path="/"
-              element={
-                <LandingPage
-                  onLaunch={() => navigate('/app/dashboard')}
-                  onOpenAuth={openAuthModal}
-                  currentUser={currentUser}
-                  onSignOut={signOut}
-                />
-              }
-            />
-
-            <Route
-              path="/login"
-              element={
-                isAuthLoading ? (
-                  <div
-                    className="min-h-screen flex items-center justify-center"
-                    style={{ backgroundColor: 'var(--color-bg-base)' }}
-                  >
-                    <div
-                      className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
-                      style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
-                    />
-                  </div>
-                ) : currentUser ? (
-                  <Navigate to="/app/dashboard" replace />
-                ) : (
-                  <LoginPage
-                    onAuthSuccess={async (email) => {
-                      if (supabase) {
-                        try {
-                          const { data: { session } } = await supabase.auth.getSession();
-                          if (session?.user) {
-                            setCurrentUser(extractUser(session.user));
-                            const cloudTrips = await cloudTripStorage.getAllTrips();
-                            setImportedItins(cloudTrips);
-                          } else {
-                            setCurrentUser({ id: 'temp', email, name: formatUserName({ email }) });
-                          }
-                        } catch (err) {
-                          console.warn('[App] Error syncing session on login:', err);
-                        }
-                      }
-                      navigate('/app/dashboard');
-                    }}
+      <Suspense fallback={<RouteSpinner />}>
+        <AnimatePresence mode="wait" initial={false}>
+          <PageTransition
+            key={pageScope(location.pathname)}
+            variant={location.pathname === '/login' ? 'login' : 'page'}
+          >
+            <Routes location={location}>
+              <Route
+                path="/"
+                element={
+                  <LandingPage
+                    onLaunch={() => navigate('/app/dashboard')}
+                    onOpenAuth={openAuthModal}
+                    currentUser={currentUser}
+                    onSignOut={signOut}
                   />
-                )
-              }
-            />
+                }
+              />
 
-            <Route path="/app/*" element={<DashboardLayout />} />
-            <Route path="/share/:shareToken" element={<SharedTripView />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </PageTransition>
-      </AnimatePresence>
+              <Route
+                path="/login"
+                element={
+                  isAuthLoading ? (
+                    <div
+                      className="min-h-screen flex items-center justify-center"
+                      style={{ backgroundColor: 'var(--color-bg-base)' }}
+                    >
+                      <div
+                        className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--color-confirmed)', borderTopColor: 'transparent' }}
+                      />
+                    </div>
+                  ) : currentUser ? (
+                    <Navigate to="/app/dashboard" replace />
+                  ) : (
+                    <LoginPage
+                      onAuthSuccess={async (email) => {
+                        if (supabase) {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            if (session?.user) {
+                              setCurrentUser(extractUser(session.user));
+                              const cloudTrips = await cloudTripStorage.getAllTrips();
+                              setImportedItins(cloudTrips);
+                            } else {
+                              setCurrentUser({ id: 'temp', email, name: formatUserName({ email }) });
+                            }
+                          } catch (err) {
+                            console.warn('[App] Error syncing session on login:', err);
+                          }
+                        }
+                        navigate('/app/dashboard');
+                      }}
+                    />
+                  )
+                }
+              />
+
+              <Route path="/app/*" element={<DashboardLayout />} />
+              <Route path="/share/:shareToken" element={<SharedTripView />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </PageTransition>
+        </AnimatePresence>
+      </Suspense>
 
     </AppContext.Provider>
     </>

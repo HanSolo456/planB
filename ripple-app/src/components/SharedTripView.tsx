@@ -8,13 +8,13 @@
 //   Accessible to anyone with the link, no login required.
 // =============================================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getSharedTrip } from '../lib/cloudTripStorage';
 import type { Itinerary } from '../lib/types';
 import {
   MapPin, Calendar, Layers, ArrowRight, AlertCircle, Clock,
-  ExternalLink, CheckCircle2,
+  ExternalLink, CheckCircle2, Download, Pencil,
 } from 'lucide-react';
 import PlanBLogo from './PlanBLogo';
 
@@ -156,6 +156,7 @@ export default function SharedTripView() {
   const navigate = useNavigate();
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
+  const [allowEdit, setAllowEdit] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -167,11 +168,12 @@ export default function SharedTripView() {
       return;
     }
     getSharedTrip(shareToken)
-      .then((trip) => {
-        if (!trip) {
+      .then((res) => {
+        if (!res) {
           setError('This share link is invalid or has expired.');
         } else {
-          setItinerary(trip);
+          setItinerary(res.itinerary);
+          setAllowEdit(res.allowEdit);
         }
       })
       .catch(() => setError('Failed to load the shared itinerary. Please try again.'))
@@ -187,6 +189,17 @@ export default function SharedTripView() {
       // fallback — silently ignore
     }
   };
+
+  /** Navigate to the import screen pre-loaded with the current share URL so the
+   *  user can import the trip (with or without editing rights). */
+  const handleImportTrip = useCallback(() => {
+    // Pass the share token as a query param — ImportView can pick it up
+    // to pre-fill the scan modal, or we just drop them at import with the
+    // share link pre-populated.  For now we navigate to /app/import and
+    // let the user paste the URL; a future enhancement could deep-link into
+    // the ScanTripModal automatically.
+    navigate('/app/import');
+  }, [navigate]);
 
   const totalCost = itinerary
     ? itinerary.bookings.reduce((s, b) => s + b.cost, 0)
@@ -344,26 +357,44 @@ export default function SharedTripView() {
               </div>
             </div>
 
-            {/* Read-only notice */}
+            {/* Permission notice — content depends on allowEdit */}
             <div
               className="flex items-center gap-2.5 px-4 py-2.5 rounded-[2px] border font-mono text-2xs"
-              style={{
-                backgroundColor: 'var(--color-confirmed-bg)',
-                borderColor: 'var(--color-confirmed-border)',
-                color: 'var(--color-confirmed)',
-              }}
+              style={
+                allowEdit
+                  ? { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: '#1D4ED8' }
+                  : { backgroundColor: 'var(--color-confirmed-bg)', borderColor: 'var(--color-confirmed-border)', color: 'var(--color-confirmed)' }
+              }
             >
-              <CheckCircle2 size={13} className="flex-shrink-0" />
-              <span>
-                <strong>Read-only view</strong> · This itinerary was shared with you.{' '}
-                <button
-                  onClick={() => navigate('/login')}
-                  className="underline cursor-pointer font-semibold"
-                >
-                  Sign up for planB
-                </button>{' '}
-                to manage your own trips and get disruption alerts.
-              </span>
+              {allowEdit ? (
+                <>
+                  <Pencil size={13} className="flex-shrink-0" />
+                  <span>
+                    <strong>Editing allowed</strong> · The owner has given you permission to import and edit this trip.{' '}
+                    <button
+                      onClick={handleImportTrip}
+                      className="underline cursor-pointer font-semibold"
+                    >
+                      Import it now
+                    </button>
+                    {' '}to add it to your trips.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={13} className="flex-shrink-0" />
+                  <span>
+                    <strong>Read-only view</strong> · This itinerary was shared with you.{' '}
+                    <button
+                      onClick={() => navigate('/login')}
+                      className="underline cursor-pointer font-semibold"
+                    >
+                      Sign up for planB
+                    </button>{' '}
+                    to manage your own trips and get disruption alerts.
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Timeline: booking rows */}
@@ -405,22 +436,55 @@ export default function SharedTripView() {
               className="rounded-[2px] border p-5 text-center space-y-3"
               style={{ backgroundColor: 'var(--color-bg-surface-alt)', borderColor: 'var(--color-border)' }}
             >
-              <p className="font-display font-bold text-lg text-[#17212B]">
-                Want disruption protection for your trips?
-              </p>
-              <p className="font-body text-sm text-[#4A5568] max-w-[52ch] mx-auto">
-                planB monitors your itinerary in real time and surfaces recovery options the moment something goes wrong.
-              </p>
-              <button
-                onClick={() => navigate('/login')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-semibold cursor-pointer transition-colors"
-                style={{ backgroundColor: 'var(--color-confirmed)', color: '#FFFFFF' }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#0c8578')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-confirmed)')}
-              >
-                Get started free
-                <ArrowRight size={14} />
-              </button>
+              {allowEdit ? (
+                <>
+                  <p className="font-display font-bold text-lg text-[#17212B]">
+                    Ready to make this trip yours?
+                  </p>
+                  <p className="font-body text-sm text-[#4A5568] max-w-[52ch] mx-auto">
+                    The owner has allowed editing. Import this trip into planB to track it, simulate disruptions, and get real-time recovery options.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <button
+                      onClick={handleImportTrip}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-semibold cursor-pointer transition-colors"
+                      style={{ backgroundColor: '#1D4ED8', color: '#FFFFFF' }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1e40af')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1D4ED8')}
+                    >
+                      <Download size={14} />
+                      Import &amp; edit this trip
+                    </button>
+                    <button
+                      onClick={() => navigate('/login')}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-semibold cursor-pointer transition-colors border"
+                      style={{ backgroundColor: 'transparent', color: 'var(--color-confirmed)', borderColor: 'var(--color-confirmed-border)' }}
+                    >
+                      Get started free
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="font-display font-bold text-lg text-[#17212B]">
+                    Want disruption protection for your trips?
+                  </p>
+                  <p className="font-body text-sm text-[#4A5568] max-w-[52ch] mx-auto">
+                    planB monitors your itinerary in real time and surfaces recovery options the moment something goes wrong.
+                  </p>
+                  <button
+                    onClick={() => navigate('/login')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-semibold cursor-pointer transition-colors"
+                    style={{ backgroundColor: 'var(--color-confirmed)', color: '#FFFFFF' }}
+                    onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = '#0c8578')}
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--color-confirmed)')}
+                  >
+                    Get started free
+                    <ArrowRight size={14} />
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

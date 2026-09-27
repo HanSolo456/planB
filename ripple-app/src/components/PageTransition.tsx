@@ -63,7 +63,6 @@ export default function PageTransition({
         duration: variant === 'nested' ? 0.26 : 0.4,
         ease: EASE,
       }}
-      style={{ willChange: 'opacity, transform' }}
     >
       {children}
     </motion.div>

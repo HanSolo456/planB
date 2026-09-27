@@ -97,12 +97,41 @@ export interface Itinerary {
 //   cancellation → booking is entirely removed; must be replaced
 // timestamp: when the disruption was detected / reported.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// REFUND ELIGIBILITY
+// Computed at runtime by calculateRefundEligibility().
+// Answers: given the current time and the booking's policy/cutoff, how much
+// money would the traveler actually get back if they cancelled right now?
+// ---------------------------------------------------------------------------
+export interface RefundEligibility {
+  /** Computed refund amount in INR (0 = non-refundable) */
+  refundAmountINR: number;
+  /** Fraction of booking cost returned (0.0 – 1.0) */
+  refundPercent: number;
+  /** Policy tier that applies right now */
+  appliedPolicy: "free" | "partial-refund" | "non-refundable";
+  /** Hours remaining until the next (worse) cutoff; null = no further cutoff */
+  hoursUntilNextCutoff: number | null;
+  /** Human summary of what the traveler gets and what changes when */
+  summary: string;
+  /** Whether the cancellation qualifies for DGCA statutory compensation */
+  dgcaCompensationEligible: boolean;
+  /** DGCA statutory compensation amount if eligible (INR) */
+  dgcaCompensationINR?: number;
+}
+
 export interface Disruption {
   bookingId: string; // The booking directly affected
-  disruptionType: "delay" | "cancellation";
+  disruptionType: "delay" | "cancellation" | "traveler-change";
   delayMinutes?: number; // Required when disruptionType === 'delay'
   reason?: string; // Human-readable cause, e.g. "Air traffic control hold"
   timestamp: string; // ISO 8601 datetime when disruption was reported
+  /**
+   * Only present when disruptionType === 'traveler-change'.
+   * Describes the nature of the voluntary modification (e.g. date change,
+   * seat upgrade, added luggage, itinerary restructure).
+   */
+  travelerChangeReason?: "date-change" | "route-change" | "seat-upgrade" | "cancel-voluntary" | "add-segment" | "other";
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +171,31 @@ export interface ImpactedBooking {
 //   This is the most important signal — even an expensive option is great
 //   if the whole trip stays intact.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// AVAILABILITY CONTEXT
+// Attached to each RecoveryOption to communicate realistic (but deterministic)
+// slot metadata. In production this would come from live GDS/OTA API results.
+// The fields allow the UI to distinguish "seat count" from "price tier" from
+// "distance from original location" without treating options as black boxes.
+// ---------------------------------------------------------------------------
+export interface AvailabilityContext {
+  /** True = same city / airport / zone as the original booking */
+  sameLocationZone: boolean;
+  /** Named location of the alternative (airport code, hotel area, etc.) */
+  alternativeLocation?: string;
+  /**
+   * Distance delta in km between the original and alternative locations.
+   * 0 = same terminal/property. Positive = farther away.
+   */
+  locationDeltaKm: number;
+  /** Estimated remaining seats / slots (deterministic heuristic) */
+  availableSlots: number;
+  /** Human label for the availability tier */
+  availabilityLabel: "filling fast" | "limited" | "available" | "guaranteed";
+  /** Pre-computed refund eligibility for the ORIGINAL booking being replaced */
+  refundEligibility?: RefundEligibility;
+}
+
 export interface RecoveryOption {
   id: string;
   description: string; // Short title, e.g. "Take evening flight 6E-507"
@@ -151,6 +205,8 @@ export interface RecoveryOption {
   costDelta: number; // INR, +/- vs original booking cost
   timeDelta: number; // Minutes, +/- vs original booking start time
   itineraryImpactScore: number; // 0-100 (higher = less disruption to rest of trip)
+  /** Availability metadata — always populated by recoveryEngine */
+  availability: AvailabilityContext;
 }
 
 // ---------------------------------------------------------------------------

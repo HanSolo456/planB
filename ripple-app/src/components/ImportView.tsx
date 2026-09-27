@@ -8,7 +8,7 @@ import { useState, useCallback, useRef, useDeferredValue } from 'react';
 import {
   Sparkles, RotateCcw, Check, AlertTriangle, ChevronRight,
   Paperclip, X, Plane, Train, Hotel, Car, Compass, CalendarClock,
-  MapPin, Clock, Wallet, Edit3, ChevronDown, ChevronUp,
+  MapPin, Clock, Wallet, Edit3, ChevronDown, ChevronUp, QrCode,
 } from 'lucide-react';
 import type { Itinerary, Booking } from '../lib/types';
 import { extractItineraryFromText, IMPORT_PRESETS } from '../lib/importEngine';
@@ -19,6 +19,7 @@ import {
   type FileError,
 } from '../lib/fileImportEngine';
 import { useAppState } from '../App';
+import ScanTripModal from './ScanTripModal';
 
 type ViewState = 'PASTE' | 'LOADING' | 'REVIEW' | 'ERROR';
 type InputTab  = 'paste' | 'upload';
@@ -174,17 +175,51 @@ function ReviewCard({ booking, index, total, onChange, onDelete }: ReviewCardPro
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm transition-shadow hover:shadow-md">
       {/* Card header — always visible */}
-      <div className="px-5 py-4">
+      <div className="p-4 sm:p-5">
+        {/* On mobile: top meta row with Icon + Type Selector + Index Pill + Edit Toggle */}
+        <div className="flex items-center justify-between gap-2 mb-2.5 sm:hidden">
+          <div className="flex items-center gap-2">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: meta.bg, color: meta.color }}
+            >
+              <meta.Icon size={15} />
+            </div>
+            <TypeSelector value={booking.type} onChange={t => onChange({ ...booking, type: t })} />
+            <span className="text-xs font-semibold text-gray-400 tabular-nums">{index + 1}/{total}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setExpanded(p => !p)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
+            title={expanded ? 'Collapse' : 'Edit all fields'}
+          >
+            {expanded ? (
+              <>
+                <ChevronUp size={13} />
+                <span>Done</span>
+              </>
+            ) : (
+              <>
+                <Edit3 size={13} />
+                <span>Edit</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Title & Provider row: spans full width on mobile; side-by-side with icon & meta on desktop */}
         <div className="flex items-start gap-3">
-          {/* Type icon circle */}
+          {/* Type icon circle — desktop only */}
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+            className="hidden sm:flex w-9 h-9 rounded-xl items-center justify-center flex-shrink-0 mt-0.5"
             style={{ backgroundColor: meta.bg, color: meta.color }}
           >
             <meta.Icon size={16} />
           </div>
 
-          {/* Main info */}
+          {/* Main info (Title + Provider) */}
           <div className="flex-1 min-w-0">
             {/* Title — always editable inline */}
             <input
@@ -208,8 +243,8 @@ function ReviewCard({ booking, index, total, onChange, onDelete }: ReviewCardPro
             />
           </div>
 
-          {/* Right: index pill + type selector + expand */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Right: index pill + type selector + expand (desktop only) */}
+          <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
             <span className="text-xs font-semibold text-gray-400 tabular-nums">{index + 1}/{total}</span>
             <TypeSelector value={booking.type} onChange={t => onChange({ ...booking, type: t })} />
             <button
@@ -224,31 +259,34 @@ function ReviewCard({ booking, index, total, onChange, onDelete }: ReviewCardPro
         </div>
 
         {/* Quick summary row — time + location + cost */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 ml-12">
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <Clock size={12} className="text-gray-400" />
-            {fmtDisplayTime(booking.startTime)}
-            <span className="text-gray-300 mx-1">→</span>
-            {fmtDisplayTime(booking.endTime)}
-          </span>
-          {locationName && (
-            <span className="flex items-center gap-1 text-xs text-gray-500">
-              <MapPin size={12} className="text-gray-400" />
-              {locationName}
+        <div className="mt-3 pt-2.5 sm:pt-0 border-t sm:border-t-0 border-gray-100 sm:ml-12 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 sm:gap-x-4 sm:gap-y-1">
+          <div className="flex items-center gap-1.5 text-xs text-gray-600 flex-wrap">
+            <Clock size={12} className="text-gray-400 shrink-0" />
+            <span className="font-medium text-gray-700">{fmtDisplayTime(booking.startTime)}</span>
+            <span className="text-gray-300 mx-0.5">→</span>
+            <span className="font-medium text-gray-700">{fmtDisplayTime(booking.endTime)}</span>
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-start gap-4 text-xs text-gray-500">
+            {locationName && (
+              <span className="flex items-center gap-1 min-w-0">
+                <MapPin size={12} className="text-gray-400 shrink-0" />
+                <span className="truncate">{locationName}</span>
+              </span>
+            )}
+            <span className="flex items-center gap-1 font-semibold text-gray-900 shrink-0 sm:ml-auto">
+              <Wallet size={12} className="text-gray-400" />
+              ₹{booking.cost.toLocaleString('en-IN')}
             </span>
-          )}
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <Wallet size={12} className="text-gray-400" />
-            ₹{booking.cost.toLocaleString('en-IN')}
-          </span>
+          </div>
         </div>
       </div>
 
       {/* Expanded editor */}
       {expanded && (
-        <div className="border-t border-gray-100 px-5 py-4 bg-gray-50 space-y-4">
+        <div className="border-t border-gray-100 p-4 sm:p-5 bg-gray-50 space-y-4">
           {/* Times row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">
                 {booking.type === 'hotel' ? 'Check-in' : booking.type === 'transfer' ? 'Pickup time' : 'Departure'}
@@ -257,7 +295,7 @@ function ReviewCard({ booking, index, total, onChange, onDelete }: ReviewCardPro
                 type="datetime-local"
                 value={fmtDateTimeLocal(booking.startTime)}
                 onChange={e => onChange({ ...booking, startTime: localToISO(e.target.value, booking.startTime) })}
-                className="w-full text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
+                className="w-full text-xs sm:text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
               />
             </div>
             <div>
@@ -268,7 +306,7 @@ function ReviewCard({ booking, index, total, onChange, onDelete }: ReviewCardPro
                 type="datetime-local"
                 value={fmtDateTimeLocal(booking.endTime)}
                 onChange={e => onChange({ ...booking, endTime: localToISO(e.target.value, booking.endTime) })}
-                className="w-full text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
+                className="w-full text-xs sm:text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
               />
             </div>
           </div>
@@ -382,8 +420,17 @@ export default function ImportView() {
   const [fileErrors, setFileErrors]       = useState<FileError[]>();
   const [isDragOver, setIsDragOver]       = useState(false);
   const [loadingLabel, setLoadingLabel]   = useState('');
+  const [showScanModal, setShowScanModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const deferredLabel = useDeferredValue(loadingLabel);
+
+  /** Called by ScanTripModal when the user confirms importing a scanned trip. */
+  const handleScanImport = useCallback((itinerary: Itinerary, _allowEdit: boolean) => {
+    // allowEdit is informational here — the trip is saved normally; SharedTripView
+    // handles the read-only enforcement via the share token, not on the imported copy.
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    addImportedItinerary(itinerary);
+  }, [addImportedItinerary]);
 
   const getExt = (name: string) => { const dot = name.lastIndexOf('.'); return dot >= 0 ? name.slice(dot).toLowerCase() : ''; };
 
@@ -492,25 +539,36 @@ export default function ImportView() {
             <p className="text-sm text-gray-500 mt-1">Paste a confirmation email or upload booking documents — the AI extracts everything automatically.</p>
           </div>
 
-          {/* Tab toggle */}
-          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-            {(['paste', 'upload'] as InputTab[]).map(tab => (
-              <button
-                key={tab}
-                id={`tab-${tab}`}
-                role="tab"
-                aria-selected={inputTab === tab}
-                onClick={() => setInputTab(tab)}
-                className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
-                style={{
-                  backgroundColor: inputTab === tab ? '#FFFFFF' : 'transparent',
-                  color: inputTab === tab ? '#111827' : '#6B7280',
-                  boxShadow: inputTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}
-              >
-                {tab === 'paste' ? 'Paste text' : 'Upload files'}
-              </button>
-            ))}
+          {/* Tab toggle + Scan button */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+              {(['paste', 'upload'] as InputTab[]).map(tab => (
+                <button
+                  key={tab}
+                  id={`tab-${tab}`}
+                  role="tab"
+                  aria-selected={inputTab === tab}
+                  onClick={() => setInputTab(tab)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
+                  style={{
+                    backgroundColor: inputTab === tab ? '#FFFFFF' : 'transparent',
+                    color: inputTab === tab ? '#111827' : '#6B7280',
+                    boxShadow: inputTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}
+                >
+                  {tab === 'paste' ? 'Paste text' : 'Upload files'}
+                </button>
+              ))}
+            </div>
+
+            {/* Scan / enter code shortcut */}
+            <button
+              onClick={() => setShowScanModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all text-gray-700"
+            >
+              <QrCode size={14} className="text-gray-500" />
+              Scan a trip
+            </button>
           </div>
 
           {/* ── PASTE TAB ── */}
@@ -703,14 +761,14 @@ export default function ImportView() {
 
       {/* ── REVIEW STATE ──────────────────────────────────────────────────── */}
       {viewState === 'REVIEW' && extracted && (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {/* Trip summary header */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div
               className="h-2 w-full"
               style={{ background: 'linear-gradient(90deg, #0A1E30, #1D4ED8, #7C3AED)' }}
             />
-            <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-0.5 rounded-full border border-green-200">
@@ -718,20 +776,20 @@ export default function ImportView() {
                     {extracted.bookings.length} bookings extracted
                   </span>
                 </div>
-                <h2 className="text-xl font-bold text-gray-900">{extracted.destination}</h2>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900">{extracted.destination}</h2>
+                <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
                   {extracted.travelerName} · {extracted.startDate} → {extracted.endDate}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 {/* Editable traveler name */}
-                <div>
+                <div className="w-full sm:w-auto">
                   <label className="block text-xs font-medium text-gray-400 mb-1">Traveler name</label>
                   <input
                     type="text"
                     value={extracted.travelerName}
                     onChange={e => setExtracted({ ...extracted, travelerName: e.target.value })}
-                    className="text-sm bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
+                    className="w-full sm:w-auto text-sm bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
                     placeholder="Traveler name"
                   />
                 </div>
@@ -740,8 +798,8 @@ export default function ImportView() {
           </div>
 
           {/* Instruction */}
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Edit3 size={14} className="text-gray-400" />
+          <div className="flex items-start gap-2 text-xs sm:text-sm text-gray-500">
+            <Edit3 size={14} className="text-gray-400 shrink-0 mt-0.5" />
             <span>Click the <strong className="text-gray-700">edit icon</strong> on any booking to expand and edit all fields. Titles and providers are always editable inline.</span>
           </div>
 
@@ -760,11 +818,11 @@ export default function ImportView() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
             <button
               id="import-confirm-btn"
               onClick={handleConfirm}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer transition-all"
+              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer transition-all"
               style={{ backgroundColor: '#0A1E30' }}
             >
               <Check size={15} />
@@ -773,13 +831,21 @@ export default function ImportView() {
             <button
               id="import-startover-btn"
               onClick={handleStartOver}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors border border-gray-200"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors border border-gray-200"
             >
               <RotateCcw size={13} />
               Start over
             </button>
           </div>
         </div>
+      )}
+
+      {/* ── SCAN TRIP MODAL ───────────────────────────────────────────────── */}
+      {showScanModal && (
+        <ScanTripModal
+          onClose={() => setShowScanModal(false)}
+          onImport={handleScanImport}
+        />
       )}
     </div>
   );

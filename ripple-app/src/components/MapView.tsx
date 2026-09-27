@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useNavigate } from 'react-router-dom';
 import {
   Plane,
   Car,
@@ -14,6 +15,9 @@ import {
   ZoomOut,
   Maximize2,
   RotateCcw,
+  X,
+  MapPin,
+  CloudRain,
 } from 'lucide-react';
 import type { Booking, Itinerary, ImpactedBooking, Disruption } from '../lib/types';
 import { useWikipediaImage, useBookingPhotos } from '../lib/useWikipediaImage';
@@ -369,7 +373,8 @@ export default function MapView({
   const [activeLeg, setActiveLeg] = useState<number | null>(null);
   const [tileLayerType, setTileLayerType] = useState<'voyager' | 'osm'>('osm');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [mobilePanel, setMobilePanel] = useState<'both' | 'route' | 'summary' | 'map'>('both');
+  const [mobilePanel, setMobilePanel] = useState<'both' | 'route' | 'summary' | 'map'>('map');
+  const navigate = useNavigate();
 
   // Header photo — Wikipedia image for destination, fallback to Unsplash
   const destQuery = itinerary.destination.split(',')[0].trim();
@@ -422,6 +427,10 @@ export default function MapView({
       };
     });
   }, [sortedBookings, geocoded]);
+
+  const selectedLegItem = useMemo(() => {
+    return activeLeg ? routeItems.find((r) => r.number === activeLeg) : null;
+  }, [activeLeg, routeItems]);
 
   // Checklist items for right panel — derived from route items
   const checklistItems = useMemo(() => {
@@ -679,29 +688,238 @@ export default function MapView({
       {/* Leaflet map */}
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0" />
 
-      {/* ── Mobile tabs ── */}
-      <div className="absolute top-3 left-3 right-3 z-30 lg:hidden flex items-center justify-between gap-2 bg-white/95 backdrop-blur-md p-1.5 rounded-xl border border-gray-200/90 shadow-sm">
-        {(['route', 'map', 'summary'] as const).map((panel) => (
+      {/* ── Mobile top floating bar (minimal, does not block the map) ── */}
+      <div className="absolute top-3 left-3 right-14 z-30 lg:hidden flex items-center gap-2 pointer-events-none">
+        <div className="flex items-center gap-1.5 pointer-events-auto">
           <button
-            key={panel}
-            onClick={() => setMobilePanel(mobilePanel === panel ? 'both' : panel)}
-            className={`flex-1 py-1 px-2.5 rounded-lg text-xs font-semibold transition-all capitalize ${
-              mobilePanel === panel
-                ? 'bg-blue-600 text-white shadow-2xs'
-                : 'text-gray-700 hover:bg-gray-100'
+            onClick={() => setMobilePanel(mobilePanel === 'route' ? 'map' : 'route')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border shadow-2xs transition-all cursor-pointer ${
+              mobilePanel === 'route'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                : 'bg-white/95 text-gray-800 border-gray-200/90 hover:bg-white'
             }`}
           >
-            {panel === 'route' ? 'Trip Route' : panel === 'map' ? 'Map View' : 'Summary'}
+            <MapPin size={13} className={mobilePanel === 'route' ? 'text-white' : 'text-blue-600'} />
+            <span>Stops ({routeItems.length})</span>
           </button>
-        ))}
+          <button
+            onClick={() => setMobilePanel(mobilePanel === 'summary' ? 'map' : 'summary')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border shadow-2xs transition-all cursor-pointer ${
+              mobilePanel === 'summary'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                : 'bg-white/95 text-gray-800 border-gray-200/90 hover:bg-white'
+            }`}
+          >
+            <span>Summary</span>
+          </button>
+        </div>
+
+        {mobilePanel !== 'map' && (
+          <button
+            onClick={() => setMobilePanel('map')}
+            className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 backdrop-blur-md transition-all pointer-events-auto cursor-pointer"
+            aria-label="Back to map"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
-      {/* ── LEFT PANEL: Trip Route ── */}
-      <div
-        className={`absolute left-5 top-5 z-20 w-72 sm:w-80 transition-all duration-200 ${
-          mobilePanel === 'summary' || mobilePanel === 'map' ? 'hidden lg:block' : 'block'
-        }`}
-      >
+      {/* ── Mobile Right Stacked Controls (Clean, doesn't overlap bottom bar) ── */}
+      <div className="absolute top-3 right-3 z-30 lg:hidden flex flex-col gap-1.5">
+        <button
+          onClick={() => mapInstanceRef.current?.zoomIn()}
+          title="Zoom in"
+          className="w-8 h-8 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-sm text-gray-700 flex items-center justify-center cursor-pointer transition-all"
+        >
+          <ZoomIn size={15} />
+        </button>
+        <button
+          onClick={() => mapInstanceRef.current?.zoomOut()}
+          title="Zoom out"
+          className="w-8 h-8 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-sm text-gray-700 flex items-center justify-center cursor-pointer transition-all"
+        >
+          <ZoomOut size={15} />
+        </button>
+        <button
+          onClick={handleResetBounds}
+          title="Reset map view"
+          className="w-8 h-8 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-sm text-gray-700 flex items-center justify-center cursor-pointer transition-all"
+        >
+          <RotateCcw size={14} />
+        </button>
+        <button
+          onClick={() => setTileLayerType(tileLayerType === 'osm' ? 'voyager' : 'osm')}
+          title="Toggle map style"
+          className="w-8 h-8 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-sm text-gray-700 flex items-center justify-center cursor-pointer transition-all"
+        >
+          <Layers size={14} />
+        </button>
+        <button
+          onClick={() => navigate(`/app/twin/${itinerary.id}`)}
+          title="Weather Digital Twin Telemetry"
+          className="w-8 h-8 rounded-xl bg-white/95 hover:bg-white border border-blue-200 shadow-sm text-blue-600 flex items-center justify-center cursor-pointer transition-all hover:scale-105"
+        >
+          <CloudRain size={14} />
+        </button>
+      </div>
+
+      {/* ── Mobile Active Leg Card (Floating neatly at bottom when a stop is selected) ── */}
+      {selectedLegItem && mobilePanel === 'map' && (
+        <div className="absolute bottom-16 inset-x-3 z-30 lg:hidden animate-fadeIn">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-xl border border-blue-200 flex items-center justify-between gap-3">
+            <div
+              onClick={() => handleSelectLeg(selectedLegItem.number)}
+              className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+            >
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 shadow-2xs"
+                style={{ backgroundColor: selectedLegItem.badgeColor }}
+              >
+                {selectedLegItem.number}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-xs text-gray-900 truncate">
+                  {selectedLegItem.title}
+                </h4>
+                <p className="text-2xs text-gray-500 truncate mt-0.5 font-medium">
+                  {selectedLegItem.subtitle || selectedLegItem.rightCode}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveLeg(null)}
+              className="p-1.5 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer rounded-full hover:bg-gray-100"
+              aria-label="Dismiss stop details"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile Drawer: Trip Route ── */}
+      {mobilePanel === 'route' && (
+        <>
+          <div
+            onClick={() => setMobilePanel('map')}
+            className="lg:hidden fixed inset-0 bg-black/30 z-30 backdrop-blur-2xs"
+          />
+          <div className="lg:hidden fixed bottom-14 inset-x-0 z-40 bg-white/98 rounded-t-3xl shadow-2xl border-t border-gray-200 max-h-[65vh] flex flex-col overflow-hidden animate-slideUp">
+            {/* Grab handle */}
+            <div className="pt-2.5 pb-1 flex justify-center">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-display font-bold text-gray-900 text-sm">Trip Route</h3>
+                <p className="text-2xs text-gray-500 font-medium">{routeItems.length} stops in sequence</p>
+              </div>
+              <button
+                onClick={() => setMobilePanel('map')}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 space-y-2.5 overflow-y-auto">
+              {routeItems.map((leg, index) => {
+                const Icon = leg.icon;
+                const isSelected = activeLeg === leg.number;
+                const isLast = index === routeItems.length - 1;
+                return (
+                  <div
+                    key={leg.id}
+                    onClick={() => {
+                      handleSelectLeg(leg.number);
+                      setMobilePanel('map');
+                    }}
+                    className={`flex items-center justify-between p-2.5 rounded-xl transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50 border border-blue-200 shadow-2xs'
+                        : 'hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs text-white z-10 shadow-2xs flex-shrink-0"
+                        style={{ backgroundColor: leg.badgeColor }}
+                      >
+                        {leg.number}
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900' : 'text-gray-800'}`}>
+                          {leg.title}
+                        </p>
+                        <p className="text-2xs text-gray-500 truncate">{leg.subtitle || leg.rightCode}</p>
+                      </div>
+                    </div>
+                    <Icon size={15} className={`flex-shrink-0 ml-2 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Mobile Drawer: Summary ── */}
+      {mobilePanel === 'summary' && (
+        <>
+          <div
+            onClick={() => setMobilePanel('map')}
+            className="lg:hidden fixed inset-0 bg-black/30 z-30 backdrop-blur-2xs"
+          />
+          <div className="lg:hidden fixed bottom-14 inset-x-0 z-40 bg-white/98 rounded-t-3xl shadow-2xl border-t border-gray-200 max-h-[65vh] flex flex-col overflow-hidden animate-slideUp">
+            {/* Grab handle */}
+            <div className="pt-2.5 pb-1 flex justify-center">
+              <div className="w-10 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="p-4 overflow-y-auto space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-display font-bold text-gray-900 text-base">{itinerary.destination}</h3>
+                  <p className="text-xs text-gray-500 font-medium">{dateRange}</p>
+                </div>
+                <button
+                  onClick={() => setMobilePanel('map')}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100 cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {checklistItems.map((item) => {
+                  const isSelected = activeLeg === item.number;
+                  return (
+                    <div
+                      key={item.number}
+                      onClick={() => {
+                        handleSelectLeg(item.number);
+                        setMobilePanel('map');
+                      }}
+                      className={`flex items-center justify-between gap-2 py-2 px-2.5 rounded-xl cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-emerald-50 border border-emerald-200'
+                          : 'hover:bg-gray-50 border border-gray-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                        <span className="text-xs font-semibold text-gray-800 truncate">{item.label}</span>
+                      </div>
+                      <span className="text-2xs font-medium text-gray-400 whitespace-nowrap ml-1">{item.sub}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── DESKTOP LEFT PANEL: Trip Route (Unchanged for Desktop) ── */}
+      <div className="hidden lg:block absolute left-5 top-5 z-20 w-72 sm:w-80 transition-all duration-200">
         <div className="bg-white/95 backdrop-blur-md rounded-2xl p-5 shadow-xl border border-gray-100/90">
           <h3 className="font-display font-bold text-gray-900 text-base mb-5 tracking-tight">
             Trip Route
@@ -745,12 +963,8 @@ export default function MapView({
         </div>
       </div>
 
-      {/* ── RIGHT PANEL: Trip Summary ── */}
-      <div
-        className={`absolute right-5 top-5 z-20 w-72 sm:w-80 transition-all duration-200 ${
-          mobilePanel === 'route' || mobilePanel === 'map' ? 'hidden lg:block' : 'block'
-        }`}
-      >
+      {/* ── DESKTOP RIGHT PANEL: Trip Summary (Unchanged for Desktop) ── */}
+      <div className="hidden lg:block absolute right-5 top-5 z-20 w-72 sm:w-80 transition-all duration-200">
         <div className="bg-white/95 backdrop-blur-md rounded-2xl overflow-hidden shadow-xl border border-gray-100/90">
           <div className="relative h-24 sm:h-28 w-full overflow-hidden bg-gray-100">
             {headerPhoto ? (
@@ -792,8 +1006,8 @@ export default function MapView({
         </div>
       </div>
 
-      {/* ── Bottom Controls ── */}
-      <div className="absolute bottom-5 right-5 z-20 flex items-center gap-2">
+      {/* ── DESKTOP Bottom Controls ── */}
+      <div className="hidden lg:flex absolute bottom-5 right-5 z-20 items-center gap-2">
         <button onClick={handleResetBounds} title="Reset map view" className="p-2 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-md text-gray-700 hover:text-gray-900 transition-all cursor-pointer">
           <RotateCcw size={15} />
         </button>
@@ -804,6 +1018,14 @@ export default function MapView({
         >
           <Layers size={13} />
           <span>{tileLayerType === 'osm' ? 'OSM Standard' : 'Voyager'}</span>
+        </button>
+        <button
+          onClick={() => navigate(`/app/twin/${itinerary.id}`)}
+          title="Open Weather Digital Twin"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-blue-200 shadow-md text-xs font-semibold text-blue-700 hover:text-blue-900 transition-all cursor-pointer hover:scale-105"
+        >
+          <CloudRain size={13} className="text-blue-600" />
+          <span>Digital Twin</span>
         </button>
         <button onClick={() => mapInstanceRef.current?.zoomIn()} title="Zoom in" className="p-2 rounded-xl bg-white/95 hover:bg-white border border-gray-200/90 shadow-md text-gray-700 hover:text-gray-900 transition-all cursor-pointer">
           <ZoomIn size={15} />

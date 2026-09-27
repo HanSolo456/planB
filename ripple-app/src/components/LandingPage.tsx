@@ -259,7 +259,7 @@ const PROBLEMS: ProblemItem[] = [
     takeaway: 'Zero cross-provider visibility leaves travelers stranded.',
     photoContext: 'Terminal Departure Board · Gate Disruption',
     impactStat: '0% Provider Sync',
-    image: '/problem-delayed-board.jpg',
+    image: '/problem-delayed-board.webp',
     imageAlt: 'Airport terminal departure board showing cancelled and delayed flights',
   },
   {
@@ -271,7 +271,7 @@ const PROBLEMS: ProblemItem[] = [
     takeaway: 'Buffers evaporate without warning across separate bookings.',
     photoContext: 'Stranded Passenger · 23:40 Local Time',
     impactStat: '82% Delays Cascade',
-    image: '/problem-stranded-traveler.jpg',
+    image: '/problem-stranded-traveler.webp',
     imageAlt: 'Stranded traveler sitting on luggage late at night looking at phone travel alerts',
   },
   {
@@ -283,7 +283,7 @@ const PROBLEMS: ProblemItem[] = [
     takeaway: 'High-stakes rebooking decisions made with zero actionable data.',
     photoContext: 'Customer Service Desk · Terminal Bottleneck',
     impactStat: '2.5hr Queue Wait',
-    image: '/problem-rebooking-queue.jpg',
+    image: '/problem-rebooking-queue.webp',
     imageAlt: 'Crowded airport customer service desk line with frustrated travelers waiting to rebook',
   },
 ];
@@ -313,7 +313,7 @@ const SOLUTIONS: SolutionItem[] = [
     takeaway: 'Full cross-provider awareness replaces isolated blind spots.',
     photoContext: 'Live Itinerary Sync · Buffer Monitored',
     impactStat: '100% Leg Visibility',
-    image: '/solution-smart-graph.jpg',
+    image: '/solution-smart-graph.webp',
     imageAlt: 'Composed traveler in modern airport lounge reviewing organized live journey itinerary on smartphone',
   },
   {
@@ -325,7 +325,7 @@ const SOLUTIONS: SolutionItem[] = [
     takeaway: 'Know which onward legs survive before chaos hits the ground.',
     photoContext: 'Proactive Alert · 45-Min Lead Time',
     impactStat: '< 3s Cascade Calc',
-    image: '/solution-reroute-flow.jpg',
+    image: '/solution-reroute-flow.webp',
     imageAlt: 'Confident traveler walking through modern airport terminal gate with live travel updates',
   },
   {
@@ -337,7 +337,7 @@ const SOLUTIONS: SolutionItem[] = [
     takeaway: 'High-confidence recovery without panic or midnight guesswork.',
     photoContext: 'Fast-Track Recovery · Zero Desk Queues',
     impactStat: '1-Tap Rebuild',
-    image: '/solution-seamless-arrival.jpg',
+    image: '/solution-seamless-arrival.webp',
     imageAlt: 'Smiling traveler stepping onto high-speed train platform arriving smoothly at destination',
   },
 ];
@@ -570,7 +570,7 @@ function CinematicTransition() {
           style={{ scale, borderRadius }}
         >
           <img
-            src="/Paris-2048x1506.png"
+            src="/Paris-2048x1506.webp"
             alt="Paris skyline"
             className="absolute inset-0 w-full h-full object-cover object-center"
             style={{ filter: 'blur(2px) brightness(0.82)', transform: 'scale(1.02)' }}
@@ -661,7 +661,7 @@ export default function LandingPage({ onLaunch, onOpenAuth, currentUser, onSignO
           style={{ borderColor: 'var(--color-border)' }}
         >
           <img
-            src="/Sydney-2048x1506.png"
+            src="/Sydney-2048x1506.webp"
             alt="Sydney Harbour"
             className="absolute inset-0 w-full h-full object-cover object-center"
             style={{
@@ -1194,7 +1194,7 @@ export default function LandingPage({ onLaunch, onOpenAuth, currentUser, onSignO
       {/* ═══ 7. BOTTOM CTA ═══════════════════════════════════════════════ */}
       <div className="relative overflow-hidden border-t" style={{ borderColor: 'var(--color-border)' }}>
         <img
-          src="/San Francisco-2048x1506.png"
+          src="/San Francisco-2048x1506.webp"
           alt=""
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none"

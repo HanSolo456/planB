@@ -11,6 +11,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
+    <!-- Preload the above-the-fold hero image so it starts downloading before
+         React boots, improving Largest Contentful Paint (LCP). -->
+    <link rel="preload" as="image" href="/Sydney-2048x1506.webp" fetchpriority="high" />
   </head>
   <body>
     <div id="root"></div>

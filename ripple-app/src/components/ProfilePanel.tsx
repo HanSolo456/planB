@@ -32,6 +32,7 @@ import { useAppState } from '../App';
 import { supabase } from '../lib/supabase';
 import { calculateTripRiskScore } from '../lib/impactEngine';
 import * as cloudTripStorage from '../lib/cloudTripStorage';
+import MobileBottomNav, { type MobileTabKey } from './MobileBottomNav';
 
 // ---------------------------------------------------------------------------
 // Inline alert
@@ -382,7 +383,7 @@ function SessionSection({ email, onSignOut }: { email: string; onSignOut: () => 
         </div>
         <p className="text-sm text-gray-400 mt-0.5">Your data remains saved in your account.</p>
       </div>
-      <div className="px-6 py-5 flex items-center justify-between gap-4">
+      <div className="px-6 py-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-600">
           Signed in as <span className="font-medium text-gray-900">{email}</span>
         </p>
@@ -518,10 +519,21 @@ function DeleteAccountSection({
 // ---------------------------------------------------------------------------
 export default function ProfilePanel() {
   const navigate = useNavigate();
-  const { currentUser, importedItineraries, signOut } = useAppState();
+  const { currentUser, importedItineraries, selectedItinerary, signOut } = useAppState();
 
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
+
+  const activeTripId = selectedItinerary?.id || importedItineraries[0]?.id || 'trip-goa-7f2a';
+
+  const handleMobileTabSelect = (tab: MobileTabKey) => {
+    if (tab === 'profile') return;
+    if (tab === 'twin') {
+      navigate(`/app/twin/${activeTripId}`);
+    } else {
+      navigate(`/app/trip/${activeTripId}?view=${tab}`);
+    }
+  };
 
   useEffect(() => {
     if (!supabase || !currentUser) return;
@@ -571,7 +583,7 @@ export default function ProfilePanel() {
       : { color: '#DC2626', bg: '#FEF2F2', border: '#FECACA' };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 lg:pb-8">
       {/* ── Identity card ───────────────────────────────────────── */}
       <IdentityCard
         email={currentUser.email}
@@ -627,6 +639,9 @@ export default function ProfilePanel() {
       <p className="text-xs text-gray-300 text-center pb-2">
         Account ID: {currentUser.id.slice(0, 16)}… · planB Dispatch Platform
       </p>
+
+      {/* Mobile Bottom Navigation Bar (Keeps 5-tab bar persistent on mobile profile) */}
+      <MobileBottomNav activeTab="profile" onTabSelect={handleMobileTabSelect} />
     </div>
   );
 }

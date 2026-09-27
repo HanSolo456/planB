@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -21,6 +22,7 @@ import { generateRecoveryOptions } from '../lib/recoveryEngine';
 import { explainRecoveryOption } from '../lib/reasoningEngine';
 import type { Disruption, ScoredRecoveryOption, TravelerPreferences } from '../lib/types';
 import { PERSONA_PRESETS } from '../lib/types';
+import { SEED_ITINERARIES } from '../lib/seedData';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -437,8 +439,10 @@ function DisruptionPill({ disruption }: { disruption: Disruption }) {
 // Main RecoveryView
 // ---------------------------------------------------------------------------
 export default function RecoveryView() {
+  const navigate = useNavigate();
   const {
     selectedItinerary,
+    importedItineraries,
     activeDisruptions,
     activeDisruption,
     impactedBookings,
@@ -455,44 +459,64 @@ export default function RecoveryView() {
     PERSONA_PRESETS.balanced.preferences
   );
 
+  const currentItinerary = useMemo(() => {
+    if (selectedItinerary) return selectedItinerary;
+    if (activeDisruptions.length > 0) {
+      const bid = activeDisruptions[0].bookingId;
+      return (
+        importedItineraries.find((it) => it.bookings.some((b) => b.id === bid)) ??
+        SEED_ITINERARIES.find((it) => it.bookings.some((b) => b.id === bid)) ??
+        null
+      );
+    }
+    return null;
+  }, [selectedItinerary, activeDisruptions, importedItineraries]);
+
   const targetDisruption: Disruption | null = useMemo(() => {
-    if (activeDisruptions.length === 1) return activeDisruptions[0];
-    return pickedDisruption;
-  }, [activeDisruptions, pickedDisruption]);
+    if (pickedDisruption) return pickedDisruption;
+    if (activeDisruption) return activeDisruption;
+    if (activeDisruptions.length > 0) return activeDisruptions[0];
+    return null;
+  }, [activeDisruptions, pickedDisruption, activeDisruption]);
 
   const sourceBooking = useMemo(
     () =>
-      targetDisruption && selectedItinerary
-        ? selectedItinerary.bookings.find((b) => b.id === targetDisruption.bookingId)
+      targetDisruption && currentItinerary
+        ? currentItinerary.bookings.find((b) => b.id === targetDisruption.bookingId)
         : null,
-    [selectedItinerary, targetDisruption]
+    [currentItinerary, targetDisruption]
   );
 
   const options = useMemo<ScoredRecoveryOption[]>(() => {
-    if (!targetDisruption || !selectedItinerary) return [];
+    if (!targetDisruption || !currentItinerary) return [];
     try {
-      return generateRecoveryOptions(selectedItinerary, targetDisruption, preferences);
+      return generateRecoveryOptions(currentItinerary, targetDisruption, preferences);
     } catch (err) {
       console.error('[planB] generateRecoveryOptions error:', err);
       return [];
     }
-  }, [selectedItinerary, targetDisruption, preferences]);
+  }, [currentItinerary, targetDisruption, preferences]);
 
   useEffect(() => {
-    if (!options.length || !targetDisruption || !selectedItinerary) return;
+    if (!options.length || !targetDisruption || !currentItinerary) return;
     setExplanations(Object.fromEntries(options.map((o) => [o.id, null])));
     options.forEach((opt) => {
-      explainRecoveryOption(opt, targetDisruption, selectedItinerary)
+      explainRecoveryOption(opt, targetDisruption, currentItinerary)
         .then((text) =>
           setExplanations((prev) => ({ ...prev, [opt.id]: text }))
         );
     });
-  }, [options, targetDisruption, selectedItinerary]);
+  }, [options, targetDisruption, currentItinerary]);
 
   const handleBack = () => {
     setPickedDisruption(null);
     setRecoveryTargetDisruption(null);
     setShowRecoveryOptions(false);
+    if (selectedItinerary) {
+      navigate(`/app/trip/${selectedItinerary.id}`);
+    } else {
+      navigate('/app/dashboard');
+    }
   };
 
   const handlePickDisruption = (d: Disruption) => {
@@ -536,7 +560,7 @@ export default function RecoveryView() {
     return (
       <DisruptionSelector
         disruptions={activeDisruptions}
-        itineraryBookings={selectedItinerary?.bookings ?? []}
+        itineraryBookings={currentItinerary?.bookings ?? []}
         onSelect={handlePickDisruption}
         onBack={handleBack}
       />
