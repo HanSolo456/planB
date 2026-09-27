@@ -13,6 +13,8 @@ export default function DisruptionBanner() {
 
   if (activeDisruptions.length === 0 || !selectedItinerary) return null;
 
+  const isReadOnly   = selectedItinerary.isReadOnly ?? false;
+
   const brokenCount  = impactedBookings.filter((b) => b.severity === 'broken').length;
   const atRiskCount  = impactedBookings.filter((b) => b.severity === 'at-risk').length;
   const isDual       = activeDisruptions.length >= 2;
@@ -67,7 +69,8 @@ export default function DisruptionBanner() {
             <button
               onClick={() => setShowRecoveryOptions(true)}
               id="view-recovery-btn"
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 cursor-pointer transition-colors shadow-sm"
+              disabled={isReadOnly}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 cursor-pointer transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span>See how to fix</span>
               <ArrowRight size={13} />

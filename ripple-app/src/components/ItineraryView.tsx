@@ -280,7 +280,8 @@ export default function ItineraryView({ itinerary }: Props) {
       setView(p);
     }
     if (searchParams.get('simulate') === 'true') {
-      setSimulateModal(true);
+      // Only open simulate modal if the trip allows editing
+      if (canEdit) setSimulateModal(true);
       const next = new URLSearchParams(searchParams);
       next.delete('simulate');
       setSearchParams(next, { replace: true });
@@ -583,7 +584,8 @@ export default function ItineraryView({ itinerary }: Props) {
                   addDisruption(sandboxDisruption);
                   setSandboxDisruption(null);
                 }}
-                className="px-4 py-2 bg-[#9E2B25] hover:bg-[#7A1E1A] text-white font-mono text-2xs font-bold uppercase tracking-wider rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors shadow-xs"
+                disabled={!canEdit}
+                className="px-4 py-2 bg-[#9E2B25] hover:bg-[#7A1E1A] text-white font-mono text-2xs font-bold uppercase tracking-wider rounded-lg cursor-pointer flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>COMMIT TO LIVE TRIP</span>
                 <ArrowRight size={13} />
@@ -974,8 +976,8 @@ export default function ItineraryView({ itinerary }: Props) {
                 </div>
               </div>
 
-              {/* Quick Actions Card */}
-              <div className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs">
+              {/* Quick Actions Card — hidden for read-only shared trips */}
+              {canEdit && <div className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs">
                 <h3 className="font-display font-bold text-base text-gray-900 flex items-center gap-2 mb-4">
                   <Zap size={16} className="text-amber-500 fill-amber-500" />
                   <span>Quick Actions</span>
@@ -1092,7 +1094,7 @@ export default function ItineraryView({ itinerary }: Props) {
                     </p>
                   )}
                 </div>
-              </div>
+              </div>}
 
               {/* Possible Impacts Card */}
               <div className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs">
@@ -1179,8 +1181,8 @@ export default function ItineraryView({ itinerary }: Props) {
                 </div>
               </div>
 
-              {/* View Recovery Options CTA Banner */}
-              <div
+              {/* View Recovery Options CTA Banner — only shown when user can edit */}
+              {canEdit && <div
                 onClick={() => {
                   setShowRecoveryOptions(true);
                   navigate('/app/recovery');
@@ -1197,7 +1199,7 @@ export default function ItineraryView({ itinerary }: Props) {
                 <p className="text-xs text-slate-300 mt-1.5">
                   See alternative plans if something goes wrong
                 </p>
-              </div>
+              </div>}
             </>
           )}
         </div>
@@ -1466,7 +1468,7 @@ export default function ItineraryView({ itinerary }: Props) {
         )}
 
       {/* Simulate Disruption Modal */}
-      {simulateModal &&
+      {canEdit && simulateModal &&
         createPortal(
           <div
             className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
