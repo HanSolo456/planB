@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, useEffect, lazy, Suspense } from 'react
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Itinerary, Booking, ImpactedBooking, Disruption } from '../lib/types';
 import { getAtRiskConnections, calculateTripRiskScore, detectCombinedImpact } from '../lib/impactEngine';
+import { topoSortBookings } from '../lib/topoSort';
 import { useAppState } from '../App';
 import MobileBottomNav, { type MobileTabKey } from './MobileBottomNav';
 import ItineraryCard from './ItineraryCard';
@@ -369,20 +370,17 @@ export default function ItineraryView({ itinerary }: Props) {
     return map;
   }, [atRiskConnections]);
 
-  // Sort bookings chronologically, using effective (post-delay) start time so
-  // delayed bookings reorder correctly in the list when a disruption is active.
-  const sortedBookings = useMemo(() => {
-    const getEffectiveStart = (booking: Booking): number => {
-      const delay = activeDisruptions.find(
-        (d) => d.bookingId === booking.id && d.disruptionType === 'delay'
-      );
-      const base = new Date(booking.startTime).getTime();
-      return delay?.delayMinutes ? base + delay.delayMinutes * 60_000 : base;
-    };
-    return [...itinerary.bookings].sort(
-      (a, b) => getEffectiveStart(a) - getEffectiveStart(b)
-    );
-  }, [itinerary, activeDisruptions]);
+  // Sort bookings using topological order (dependsOn) so that a booking always
+  // appears after all bookings it depends on, regardless of effective startTime.
+  // Within the same dependency wave, startTime is used as a tiebreaker.
+  //
+  // WHY NOT sort by effective (delayed) startTime:
+  //   A 4-hour flight delay shifts the flight's effective start to 10:15, which
+  //   is after the dependent transfer's 09:30 — a time-sort would flip them.
+  const sortedBookings = useMemo(
+    () => topoSortBookings(itinerary.bookings),
+    [itinerary]
+  );
 
   // Currently selected booking for detail inspection card
   const selectedBooking = useMemo(() => {
