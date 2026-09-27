@@ -251,7 +251,7 @@ function DashboardLayout() {
       }}
     >
       {/* Floating pill nav on trip, twin, import and profile — minimal, consistent */}
-      {isTrip && <FloatingNav backLabel="All trips" backTo="/app/dashboard" rightAction="simulate" />}
+      {isTrip && <FloatingNav backLabel="All trips" backTo="/app/dashboard" rightAction={selectedItinerary?.isReadOnly ? 'none' : 'simulate'} />}
       {isRecovery && <FloatingNav backLabel={recoveryBackLabel} backTo={recoveryBackTo} rightAction="simulate" />}
       {isTwin && (
         <FloatingNav

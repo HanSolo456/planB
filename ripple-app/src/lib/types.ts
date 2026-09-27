@@ -87,6 +87,7 @@ export interface Itinerary {
   startDate: string; // ISO date of first day, e.g. "2024-12-15"
   endDate: string; // ISO date of last day
   bookings: Booking[];
+  isReadOnly?: boolean; // true when imported from a share link with allowEdit=false
   meta?: Record<string, unknown>;
 }
 

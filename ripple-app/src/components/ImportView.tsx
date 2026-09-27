@@ -425,11 +425,12 @@ export default function ImportView() {
   const deferredLabel = useDeferredValue(loadingLabel);
 
   /** Called by ScanTripModal when the user confirms importing a scanned trip. */
-  const handleScanImport = useCallback((itinerary: Itinerary, _allowEdit: boolean) => {
-    // allowEdit is informational here — the trip is saved normally; SharedTripView
-    // handles the read-only enforcement via the share token, not on the imported copy.
+  const handleScanImport = useCallback((itinerary: Itinerary, allowEdit: boolean) => {
+    // If the share link didn't grant edit rights, stamp the trip as read-only
+    // so ItineraryView can hide edit affordances.
+    const tripToSave = allowEdit ? itinerary : { ...itinerary, isReadOnly: true };
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    addImportedItinerary(itinerary);
+    addImportedItinerary(tripToSave);
   }, [addImportedItinerary]);
 
   const getExt = (name: string) => { const dot = name.lastIndexOf('.'); return dot >= 0 ? name.slice(dot).toLowerCase() : ''; };

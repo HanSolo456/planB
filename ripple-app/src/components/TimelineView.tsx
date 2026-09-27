@@ -108,12 +108,12 @@ export default function TimelineView({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200/90 shadow-xs p-3.5 sm:p-7 relative min-w-0 transition-all">
-      <div className="space-y-7 sm:space-y-9">
+    <div className="bg-white rounded-2xl border border-gray-200/90 shadow-xs p-4 sm:p-7 relative min-w-0 transition-all">
+      <div className="space-y-10 sm:space-y-9">
         {dayGroups.map((group) => (
           <div key={group.dateKey} className="relative">
             {/* Mobile-only Horizontal Day Header Divider */}
-            <div className="sm:hidden flex items-center justify-between gap-2.5 mb-3.5 pt-1">
+            <div className="sm:hidden flex items-center justify-between gap-2.5 mb-5 pt-1">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#EFF6FF] border border-[#DBEAFE] text-[#1D4ED8] shadow-2xs font-bold text-xs">
                 <CalendarDays size={13} className="text-[#2563EB]" />
                 <span>{group.dayShort}, {group.dateShort}</span>
@@ -138,14 +138,14 @@ export default function TimelineView({
               </div>
 
               {/* Right Column (Mobile: Full Width with Left Spine): Events & Spine */}
-              <div className="flex-1 min-w-0 relative pl-4 sm:pl-7 pb-2">
+              <div className="flex-1 min-w-0 relative pl-5 sm:pl-7 pb-4 sm:pb-2">
                 {/* Continuous vertical timeline spine */}
                 <div
                   className="absolute left-[5px] sm:left-[7px] top-4 bottom-4 w-[2px] bg-[#E2E8F0] -translate-x-1/2 pointer-events-none"
                   aria-hidden="true"
                 />
 
-                <div className="space-y-4">
+                <div className="space-y-6 sm:space-y-4">
                   {group.bookings.map((booking) => {
                     const globalIdx = sortedBookings.findIndex((b) => b.id === booking.id);
                     const prevBooking = globalIdx > 0 ? sortedBookings[globalIdx - 1] : null;
@@ -221,10 +221,10 @@ export default function TimelineView({
                       : defaultSubtitle;
 
                     return (
-                      <div key={booking.id} className="space-y-3.5 sm:space-y-4">
+                      <div key={booking.id} className="space-y-5 sm:space-y-4">
                         {/* Inter-booking Buffer & Warning Callout */}
                         {bufferInfo && (
-                          <div className="relative pl-5 sm:pl-7 py-2">
+                          <div className="relative pl-4 sm:pl-7 py-3 sm:py-2">
                             {/* Buffer badge on the spine */}
                             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-50 border border-gray-200/90 text-gray-600 font-mono text-xs font-semibold shadow-2xs">
                               <Clock size={12} className="text-gray-400" />
@@ -233,7 +233,7 @@ export default function TimelineView({
 
                             {/* Tight Connection Warning Card */}
                             {bufferInfo.isTight && (
-                              <div className="mt-2.5 p-3.5 sm:p-4 rounded-xl bg-[#FFF7ED] border border-[#FED7AA] shadow-2xs">
+                              <div className="mt-4 sm:mt-2.5 p-4 sm:p-4 rounded-xl bg-[#FFF7ED] border border-[#FED7AA] shadow-2xs">
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0 animate-pulse" />
                                   <h4 className="font-bold text-xs sm:text-sm text-amber-950">
@@ -254,7 +254,7 @@ export default function TimelineView({
                             onSelectBooking(booking.id);
                             setExpandedRows((prev) => ({ ...prev, [booking.id]: !prev[booking.id] }));
                           }}
-                          className={`group relative rounded-2xl p-3.5 sm:p-4 transition-all cursor-pointer border shadow-2xs ${
+                          className={`group relative rounded-2xl p-4 sm:p-4 transition-all cursor-pointer border shadow-2xs ${
                             isSelected
                               ? 'bg-blue-50/50 border-blue-400/90 ring-1 ring-blue-500/20'
                               : 'bg-white hover:bg-gray-50/70 border-gray-200/90 hover:border-gray-300'
@@ -274,10 +274,10 @@ export default function TimelineView({
                           {/* ======================================================== */}
                           {/* MOBILE LAYOUT (< sm): Spacious, De-congested 2-Tier Design */}
                           {/* ======================================================== */}
-                          <div className="sm:hidden flex flex-col gap-2.5">
+                          <div className="sm:hidden flex flex-col gap-3">
                             {/* Tier 1: Category Icon + Title/Details + Status Badge + Chevron */}
-                            <div className="flex items-center justify-between gap-2 min-w-0">
-                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3 min-w-0">
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
                                 {/* Category Icon */}
                                 <div
                                   className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-2xs border ${
@@ -311,7 +311,7 @@ export default function TimelineView({
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <div className="flex items-start gap-1.5 flex-shrink-0 pt-0.5">
                                 {/* Status Badge */}
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-mono font-bold uppercase tracking-wider border shadow-2xs ${

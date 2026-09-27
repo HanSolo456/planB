@@ -245,6 +245,8 @@ export default function ItineraryView({ itinerary }: Props) {
     hasCapacityForAnotherDisruption,
   } = useAppState();
 
+  const canEdit = !itinerary.isReadOnly;
+
   // ---------------------------------------------------------------------------
   // PROACTIVE WHAT-IF SCENARIO SANDBOX STATE
   // ---------------------------------------------------------------------------
@@ -630,6 +632,7 @@ export default function ItineraryView({ itinerary }: Props) {
                   <Share2 size={12} />
                   <span>Share</span>
                 </button>
+                {canEdit && (
                 <button
                   onClick={() => setEditTripModal(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 hover:bg-black/60 border border-white/20 text-white text-xs font-medium backdrop-blur-md transition-all cursor-pointer shadow-xs"
@@ -637,6 +640,7 @@ export default function ItineraryView({ itinerary }: Props) {
                   <Pencil size={12} />
                   <span>Edit Trip</span>
                 </button>
+                )}
               </div>
             </div>
 
@@ -788,13 +792,15 @@ export default function ItineraryView({ itinerary }: Props) {
                 <CloudRain size={13} className="text-sky-300" />
                 <span>Digital Twin</span>
               </button>
-              <button
-                onClick={() => setSimulateModal(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0D1520] hover:bg-[#1A2634] text-white text-xs font-semibold cursor-pointer shadow-xs transition-all"
-              >
-                <Zap size={13} className="text-amber-400 fill-amber-400" />
-                <span>Simulate Disruption</span>
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setSimulateModal(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0D1520] hover:bg-[#1A2634] text-white text-xs font-semibold cursor-pointer shadow-xs transition-all"
+                >
+                  <Zap size={13} className="text-amber-400 fill-amber-400" />
+                  <span>Simulate Disruption</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -808,7 +814,7 @@ export default function ItineraryView({ itinerary }: Props) {
               activeDisruptions={activeDisruptions}
               impactedMap={impactedMap}
               atRiskByBookingId={atRiskByBookingId}
-              onReportDisruption={() => setSimulateModal(true)}
+              onReportDisruption={canEdit ? () => setSimulateModal(true) : undefined}
             />
           )}
 
@@ -879,7 +885,7 @@ export default function ItineraryView({ itinerary }: Props) {
                 <SelectedBookingDetailCard
                   booking={selectedBooking}
                   itinerary={itinerary}
-                  onReportDisruption={() => setSimulateModal(true)}
+                  onReportDisruption={canEdit ? () => setSimulateModal(true) : undefined}
                   isDisrupted={
                     activeDisruptions.some((d) => d.bookingId === selectedBooking.id) ||
                     impactedMap.get(selectedBooking.id)?.severity === 'broken'
