@@ -33,17 +33,18 @@ export default function DisruptionBanner() {
 
       <div className="p-4 sm:p-5">
         {/* ── Header row ── */}
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          {/* Left: icon + title + subtitle */}
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
               <Zap size={15} className="text-rose-600" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-bold text-gray-900">
-                  {isDual ? 'Multiple disruptions reported' : 'Disruption reported'}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
+                  {isDual ? 'Multiple disruptions' : 'Disruption reported'}
                 </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 uppercase tracking-wide">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 uppercase tracking-wide whitespace-nowrap flex-shrink-0">
                   Action needed
                 </span>
               </div>
@@ -55,12 +56,12 @@ export default function DisruptionBanner() {
             </div>
           </div>
 
-          {/* CTA */}
+          {/* CTA buttons — full width on mobile, auto on sm+ */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {!isDual && (
               <button
                 onClick={clearAllDisruptions}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200 cursor-pointer transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <RotateCcw size={12} />
                 <span>Clear</span>
@@ -70,7 +71,7 @@ export default function DisruptionBanner() {
               onClick={() => setShowRecoveryOptions(true)}
               id="view-recovery-btn"
               disabled={isReadOnly}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 cursor-pointer transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 cursor-pointer transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
             >
               <span>See how to fix</span>
               <ArrowRight size={13} />
