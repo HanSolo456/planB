@@ -958,7 +958,70 @@ export function generateRecoveryOptions(
 }
 
 // =============================================================================
+// PRIVATE HELPER: topoSortBookings
+//
+// Sorts bookings so that every booking appears AFTER all bookings it depends on.
+// Within the same dependency level, bookings are ordered by startTime.
+//
+// This is necessary after applying a recovery option that shifts a booking's
+// startTime past a downstream booking's startTime (e.g. a 4-hour flight delay
+// makes the flight start at 10:15 while the dependent transfer is at 09:30 —
+// a naive time sort would put them in the wrong order).
+// =============================================================================
+function topoSortBookings(bookings: Booking[]): Booking[] {
+  const bookingMap = new Map<string, Booking>(bookings.map((b) => [b.id, b]));
+
+  // Build in-degree map and adjacency list (who depends on whom)
+  const inDegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>(); // id → [ids that depend on id]
+
+  for (const b of bookings) {
+    inDegree.set(b.id, b.dependsOn.filter((d) => bookingMap.has(d)).length);
+    for (const dep of b.dependsOn) {
+      if (!dependents.has(dep)) dependents.set(dep, []);
+      dependents.get(dep)!.push(b.id);
+    }
+  }
+
+  // Kahn's algorithm — process by startTime within each wave so the
+  // relative time order is preserved for siblings with no dependency link.
+  const result: Booking[] = [];
+  let wave = bookings
+    .filter((b) => (inDegree.get(b.id) ?? 0) === 0)
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+  while (wave.length > 0) {
+    result.push(...wave);
+    const nextWave: Booking[] = [];
+    for (const b of wave) {
+      for (const depId of dependents.get(b.id) ?? []) {
+        const newDeg = (inDegree.get(depId) ?? 1) - 1;
+        inDegree.set(depId, newDeg);
+        if (newDeg === 0) {
+          const dep = bookingMap.get(depId);
+          if (dep) nextWave.push(dep);
+        }
+      }
+    }
+    wave = nextWave.sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    );
+  }
+
+  // Fallback: append any bookings not reached (shouldn't happen with a valid graph)
+  if (result.length < bookings.length) {
+    const seen = new Set(result.map((b) => b.id));
+    for (const b of bookings) {
+      if (!seen.has(b.id)) result.push(b);
+    }
+  }
+
+  return result;
+}
+
+// =============================================================================
 // EXPORTED FUNCTION: applyRecoveryOption
+
 //
 // Returns a NEW Itinerary (immutable — original is not mutated) with:
 //   1. The disrupted booking replaced by the recovery option's replacement.
@@ -1019,14 +1082,18 @@ export function applyRecoveryOption(
   });
 
   // Swap the disrupted slot for the replacement (same ID, new details),
-  // then re-sort chronologically.
-  const bookingsWithReplacement = [
+  // then re-order using a topological sort that respects dependsOn.
+  //
+  // WHY: A naive startTime sort breaks when a delay shifts the disrupted
+  // booking's startTime past a downstream booking's startTime (e.g. a
+  // 4-hour flight delay moves the flight to 10:15, after the transfer at
+  // 09:30 — the sort would put the transfer first, inverting the graph).
+  const rawBookings = [
     ...updatedBookings.filter((b) => b.id !== option.affectedBookingId),
     replacementWithOriginalId,
-  ].sort(
-    (a, b) =>
-      new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-  );
+  ];
+
+  const bookingsWithReplacement = topoSortBookings(rawBookings);
 
   // Keep the itinerary ID stable so the importedItins list stays in sync.
   // Only stamp a recovery marker in meta, not in the ID itself.

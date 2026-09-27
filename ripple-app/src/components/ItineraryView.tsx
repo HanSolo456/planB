@@ -369,14 +369,20 @@ export default function ItineraryView({ itinerary }: Props) {
     return map;
   }, [atRiskConnections]);
 
-  // Sort bookings chronologically
-  const sortedBookings = useMemo(
-    () =>
-      [...itinerary.bookings].sort(
-        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-      ),
-    [itinerary]
-  );
+  // Sort bookings chronologically, using effective (post-delay) start time so
+  // delayed bookings reorder correctly in the list when a disruption is active.
+  const sortedBookings = useMemo(() => {
+    const getEffectiveStart = (booking: Booking): number => {
+      const delay = activeDisruptions.find(
+        (d) => d.bookingId === booking.id && d.disruptionType === 'delay'
+      );
+      const base = new Date(booking.startTime).getTime();
+      return delay?.delayMinutes ? base + delay.delayMinutes * 60_000 : base;
+    };
+    return [...itinerary.bookings].sort(
+      (a, b) => getEffectiveStart(a) - getEffectiveStart(b)
+    );
+  }, [itinerary, activeDisruptions]);
 
   // Currently selected booking for detail inspection card
   const selectedBooking = useMemo(() => {

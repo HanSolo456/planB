@@ -286,7 +286,7 @@ export const goaSaumitraTrip: Itinerary = {
       bufferMinutes: 45,
       cost: 1850,
       cancellationPolicy: { policy: "free", cutoffHours: 6 },
-      status: "at-risk",
+      status: "confirmed",
       meta: {
         bookingId: "GM-TX-88219",
         vehicle: "Toyota Innova Crysta",
