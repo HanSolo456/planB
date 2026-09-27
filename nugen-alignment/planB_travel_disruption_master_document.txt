@@ -1,0 +1,101 @@
+# PLANB TRAVEL DISRUPTION INTELLIGENCE & IROPS RECOVERY
+# DOMAIN ALIGNMENT MASTER DOCUMENT
+
+## 1. EXECUTIVE SUMMARY & PROBLEM STATEMENT
+In travel logistics and consumer tourism, an Irregular Operation (IROPS) happens when any scheduled event diverges from planned execution due to external factors (weather delays, airspace congestion, crew timeout, maintenance faults, rail blockades).
+Traditional travel booking platforms operate in isolated silos where flights, hotels, and activities are disconnected tickets. In contrast, an actual trip is a Directed Acyclic Graph (DAG) of interdependent events.
+When an upstream disruption occurs on node B_i (e.g. flight delayed by 180 minutes), the delay cascades down the graph along dependency edges, eroding buffer times and causing catastrophic downstream failures (missed hotel check-ins, invalidated tours, missed connecting flights).
+
+planB utilizes domain-aligned artificial intelligence to:
+1. Parse conversational natural-language messages from travelers reporting delays or cancellations.
+2. Extract structured entities: affected booking ID, disruption type (delay vs cancellation), duration in minutes, and root cause.
+3. Propagate delay minutes and cancellation flags through the itinerary DAG.
+4. Calculate buffer erosion, identify at-risk and breached bookings, and calculate financial exposure.
+5. Synthesize three distinct recovery plans: "Slide Schedule", "Swap Leg", and "Emergency Rebook & Refund".
+
+---
+
+## 2. ITINERARY DAG ONTOLOGY & BUFFER CALCULATIONS
+### 2.1 Entity Classes
+- Flight: Air transit between IATA codes. Rigid check-in and boarding gate closures. Baggage retrieval times: 25-45 minutes domestic, 45-75 minutes international.
+- Train: Rail transit between railway stations. Platform arrival times and fixed departure schedules.
+- Transfer: Ground transportation (private cab, airport shuttle, ride-hailing). Bridges transit hubs with hotels or activity venues.
+- Hotel: Lodging accommodation. Governed by check-in time windows (usually 14:00-15:00 onwards) and strict No-Show cutoff times (23:59 on arrival night).
+- Activity: Scheduled tourist excursions (scuba diving, boat charters, guided tours). High cancellation penalties within 24 hours.
+- Event: Time-critical appointments (conferences, weddings, flights). Zero tolerance for delay.
+
+### 2.2 Mathematical Buffer Constraints
+Let predecessor node be B_A and successor node be B_B with a dependency B_A -> B_B.
+- Actual Gap = StartTime(B_B) - EndTime(B_A)
+- Required Buffer = tau_buffer(B_A -> B_B)
+- Slack = Actual Gap - Required Buffer
+
+Rules:
+- If Slack >= 15 min: State = Confirmed. Disruption is absorbed by buffer.
+- If 0 <= Slack < 15 min: State = At-Risk. Tight connection, monitor closely.
+- If Slack < 0 min: State = Disrupted. Physical transition is impossible without rescheduling.
+
+Standard Empirical Buffers:
+- Domestic Flight to Cab Pickup: 45 minutes with checked bags, 30 minutes with cabin baggage only.
+- International Flight to Connection/Transfer: 90-120 minutes for immigration, baggage claim, customs, and security re-check.
+- Airport Transfer to Hotel Check-in: Driving duration + 20 minutes loading/traffic buffer.
+- Hotel Check-in to Activity: 45-60 minutes for room key issuance, luggage drop, freshening up, and local transit.
+
+---
+
+## 3. INDIAN AVIATION (DGCA) & CARRIER POLICIES
+### 3.1 DGCA Civil Aviation Requirements (CAR Section 3, Series M, Part IV)
+1. Flight Delays:
+   - Delays of 2+ hours (block time <= 2.5 hrs): Mandatory free meals and refreshments.
+   - Delays of 3+ hours (block time 2.5 - 5 hrs): Mandatory free meals and refreshments.
+   - Delays of 6+ hours: Mandatory choice between alternate flight or 100% full refund.
+   - Overnight delays (between 20:00 and 03:00 exceeding 6 hrs) or delays > 24 hrs: Free hotel accommodation, meals, and airport transfers.
+2. Flight Cancellations (announced < 24 hours prior):
+   - Full refund or alternate flight within 2 hours.
+   - Statutory compensation:
+     * Block time up to 1 hr: ₹5,000 or basic fare + fuel charge.
+     * Block time 1-2 hrs: ₹7,500 or basic fare + fuel charge.
+     * Block time > 2 hrs: ₹10,000 or basic fare + fuel charge.
+   - Exemption: Extraordinary circumstances beyond airline control (weather, ATC, security). Meals and refreshments remain mandatory.
+3. Single PNR vs Split PNR:
+   - Single PNR: Carrier is contractually and legally bound to reroute passenger to final destination or refund entire journey if connection is missed.
+   - Split PNR: Each carrier treats the flight as a standalone contract. Late arrival of Leg 1 results in passenger being marked as No-Show on Leg 2, forfeiting 100% ticket cost. Minimum recommended split-PNR buffer is 180 minutes domestic and 240 minutes international.
+
+### 3.2 Airport Dynamics
+- Delhi IGI (DEL): Terminal 1, Terminal 2, and Terminal 3. Inter-terminal transfer requires 90-120 minutes. CAT III-B winter fog causes 60-180 minute ground delays.
+- Goa Airports:
+  * Dabolim (GOI): Located in South-Central Goa. 75-90 min drive to North Goa beaches (Candolim, Vagator).
+  * Manohar Mopa (GOX): Located in North Goa (Pernem). 35-50 min drive to North Goa beaches; 100-140 min drive to South Goa beaches (Palolem).
+  * Mistaking GOI for GOX introduces a 40-70 minute schedule error.
+
+---
+
+## 4. HOTEL & ACTIVITY NO-SHOW PROTECTION
+- Hotel No-Show Risk: If a guest fails to check in by 23:59 on Day 1, property management systems automatically cancel all subsequent nights of the booking and forfeit Day 1 payment.
+- planB Automated Protection: When flight delay arrives past 21:00 or spills to next calendar day, generate a "Late Check-in Guarantee Notice" to the hotel to preserve the room reservation.
+- Activity Reschedule Window: Adventure and water sports have a 24-hour cancellation cutoff, but operators typically offer free date/time sliding if notified at least 2-4 hours prior to scheduled departure.
+
+---
+
+## 5. RECOVERY STRATEGY TAXONOMY
+1. Slide Schedule: Shift downstream bookings forward into later time slots without modifying providers. Low friction, zero extra cost.
+2. Swap Leg: Replace bottlenecked transport with faster alternative (express train, private direct cab, alternate flight) or swap Day 1 activity with Day 2 downtime.
+3. Emergency Rebook & Refund: Immediately cancel doomed downstream reservations before cancellation cutoffs expire to salvage refunds; rebook primary transit on earliest guaranteed departure.
+
+---
+
+## 6. STRUCTURED EXTRACTION SCHEMA FOR DISRUPTION MESSAGES
+```json
+{
+  "bookingId": "string identifier of affected booking",
+  "type": "delay | cancellation",
+  "delayMinutes": 120,
+  "reason": "Detailed cause of disruption",
+  "severity": "low | medium | high | critical",
+  "cascadeImpact": {
+    "affectedBookingsCount": 2,
+    "atRiskBookingIds": ["transfer-01", "activity-scuba"],
+    "immediateActionRequired": "Reschedule airport pickup to 13:45 and slide scuba diving session to Day 2 morning"
+  }
+}
+```

@@ -15,6 +15,7 @@ import type {
   Disruption,
   RecoveryOption,
   ScoredRecoveryOption,
+  TravelerPreferences,
 } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -487,9 +488,24 @@ function generateCancellationRecoveries(
 // =============================================================================
 export function generateRecoveryOptions(
   itinerary: Itinerary,
-  disruption: Disruption
+  disruption: Disruption,
+  preferences?: TravelerPreferences
 ): ScoredRecoveryOption[] {
   const original = getOriginalBooking(itinerary, disruption.bookingId);
+
+  // Derive weights from preferences if provided
+  let weights = DEFAULT_WEIGHTS;
+  if (preferences) {
+    const rawImpact = Math.max(0.1, preferences.continuityPriority);
+    const rawCost = Math.max(0.1, preferences.costSensitivity);
+    const rawTime = Math.max(0.1, preferences.timeUrgency);
+    const sum = rawImpact + rawCost + rawTime;
+    weights = {
+      itineraryImpact: rawImpact / sum,
+      cost: rawCost / sum,
+      time: rawTime / sum,
+    };
+  }
 
   // Generate raw options based on disruption type
   const rawOptions: RecoveryOption[] =
@@ -497,10 +513,35 @@ export function generateRecoveryOptions(
       ? generateDelayRecoveries(original, disruption, itinerary)
       : generateCancellationRecoveries(original, disruption, itinerary);
 
-  // Score and rank each option
-  const scored = rawOptions.map((opt) =>
-    scoreRecoveryOption(opt, DEFAULT_WEIGHTS)
-  );
+  // Score each option
+  const scored = rawOptions.map((opt) => {
+    const scoredOpt = scoreRecoveryOption(opt, weights);
+
+    // Compute persona match score (0-100)
+    let personaMatchScore = scoredOpt.compositeScore;
+    let personaMatchLabel = "Balanced Fit";
+
+    if (preferences) {
+      if (preferences.personaId === "budget") {
+        const costSavingRatio = Math.max(0, 100 - Math.max(0, opt.costDelta) / 30);
+        personaMatchScore = Math.round(costSavingRatio * 0.7 + opt.itineraryImpactScore * 0.3);
+        personaMatchLabel = opt.costDelta <= 0 ? "Top Budget Pick (₹0 Extra)" : "Moderate Budget Impact";
+      } else if (preferences.personaId === "business") {
+        const speedRatio = Math.max(0, 100 - Math.max(0, opt.timeDelta) / 2);
+        personaMatchScore = Math.round(speedRatio * 0.7 + opt.itineraryImpactScore * 0.3);
+        personaMatchLabel = opt.timeDelta <= 30 ? "Fastest Arrival Option" : "Express Transit Alternative";
+      } else if (preferences.personaId === "minimal-disruption") {
+        personaMatchScore = Math.round(opt.itineraryImpactScore * 0.85 + (100 - Math.min(100, Math.max(0, opt.timeDelta) / 4)) * 0.15);
+        personaMatchLabel = opt.itineraryImpactScore >= 85 ? "Maximum Schedule Continuity" : "Preserves Core Bookings";
+      }
+    }
+
+    return {
+      ...scoredOpt,
+      personaMatchScore,
+      personaMatchLabel,
+    };
+  });
 
   // Sort descending: best score first
   return scored.sort((a, b) => b.compositeScore - a.compositeScore);
@@ -529,32 +570,58 @@ export function applyRecoveryOption(
   itinerary: Itinerary,
   option: RecoveryOption
 ): Itinerary {
-  // Deep clone bookings (no mutation)
+  // The replacement booking must keep the original booking's ID so that all
+  // downstream bookings whose `dependsOn` arrays reference the original ID
+  // continue to resolve correctly. This is the key fix: without it, a second
+  // disruption on the replacement has no cascade effect because nothing in
+  // the graph points at the synthetic `_recovery_` ID.
+  // Look up the original booking so we can stamp its times into meta.
+  // This is what powers the "strikethrough original → new time" rendering in BookingCard.
+  const originalBooking = itinerary.bookings.find((b) => b.id === option.affectedBookingId);
+
+  const replacementWithOriginalId: Booking = {
+    ...option.replacementBooking,
+    id: option.affectedBookingId,
+    status: "recovered" as const,
+    meta: {
+      ...option.replacementBooking.meta,
+      // Stamp original times so BookingCard can show strikethrough
+      originalStartTime: originalBooking?.startTime,
+      originalEndTime: originalBooking?.endTime,
+      originalCost: originalBooking?.cost,
+      recoveredFrom: option.description,
+    },
+  };
+
+  // Deep clone bookings (no mutation).
+  // At-risk bookings are reset to 'confirmed' (not 'recovered') so the
+  // DisruptionTrigger button continues to render normally on them and
+  // they can be disrupted again in subsequent scenarios.
   const updatedBookings: Booking[] = itinerary.bookings.map((booking) => {
     if (booking.id === option.affectedBookingId) {
-      // Mark the original disrupted booking as 'disrupted' (preserve for history)
+      // The original slot is replaced — we drop it below.
       return { ...booking, status: "disrupted" as const };
     }
     if (booking.status === "at-risk") {
-      // Optimistically restore at-risk bookings now that the root cause is resolved
-      return { ...booking, status: "recovered" as const };
+      return { ...booking, status: "confirmed" as const };
     }
     return { ...booking };
   });
 
-  // Filter out the disrupted booking (replaced by the recovery option)
-  // and add the replacement, then re-sort chronologically.
+  // Swap the disrupted slot for the replacement (same ID, new details),
+  // then re-sort chronologically.
   const bookingsWithReplacement = [
     ...updatedBookings.filter((b) => b.id !== option.affectedBookingId),
-    option.replacementBooking,
+    replacementWithOriginalId,
   ].sort(
     (a, b) =>
       new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
   );
 
+  // Keep the itinerary ID stable so the importedItins list stays in sync.
+  // Only stamp a recovery marker in meta, not in the ID itself.
   return {
     ...itinerary,
-    id: `${itinerary.id}_recovered_${Date.now()}`,
     bookings: bookingsWithReplacement,
     meta: {
       ...itinerary.meta,

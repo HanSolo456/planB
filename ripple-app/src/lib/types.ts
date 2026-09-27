@@ -122,6 +122,12 @@ export interface ImpactedBooking {
   bufferShortfallMinutes: number;
   /** Whether this booking is fully broken (cancellation or zero buffer) vs just at risk */
   severity: "at-risk" | "broken";
+  /**
+   * Present only when 2 concurrent disruptions both impact this booking.
+   * Always 2 when set. Undefined/absent for single-disruption entries.
+   * Powers the compound badge in the UI.
+   */
+  compoundDisruptionCount?: 2;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +167,10 @@ export interface ScoredRecoveryOption extends RecoveryOption {
     costScore: number;      // Weighted cost contribution (lower cost = higher score)
     timeScore: number;      // Weighted time contribution (less delay = higher score)
   };
+  /** Traveler persona match percentage (0-100) */
+  personaMatchScore?: number;
+  /** Persona match explanation (e.g. "Top match for Budget Explorer") */
+  personaMatchLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +192,51 @@ export interface AtRiskConnection {
 }
 
 // ---------------------------------------------------------------------------
-// TRIP RISK SCORE
+// RESILIENCE PILLARS & PROACTIVE AUDIT
+// Sub-score components evaluating multi-dimensional trip health.
+// ---------------------------------------------------------------------------
+export interface ResiliencePillars {
+  bufferHealth: {
+    score: number; // 0-100
+    weight: number; // 0.35
+    label: string;
+    description: string;
+    tightConnectionsCount: number;
+  };
+  financialExposure: {
+    score: number; // 0-100
+    weight: number; // 0.25
+    nonRefundableTotal: number;
+    nonRefundablePercent: number;
+    label: string;
+    description: string;
+  };
+  criticalPathRisk: {
+    score: number; // 0-100
+    weight: number; // 0.25
+    chokepointsCount: number;
+    chokepointLabels: string[];
+    label: string;
+    description: string;
+  };
+  alternativeRedundancy: {
+    score: number; // 0-100
+    weight: number; // 0.15
+    label: string;
+    description: string;
+  };
+}
+
+export interface ResilienceRecommendation {
+  id: string;
+  type: "buffer" | "policy" | "routing";
+  title: string;
+  description: string;
+  targetBookingId?: string;
+}
+
+// ---------------------------------------------------------------------------
+// TRIP RISK SCORE (EXTENDED)
 // Evaluates whole-itinerary schedule robustness (0-100, where 100 = safest).
 // ---------------------------------------------------------------------------
 export interface TripRiskScore {
@@ -197,5 +251,96 @@ export interface TripRiskScore {
     riskContribution: number;
     reason: string;
   }[];
+  /** Multi-factor pillars */
+  pillars?: ResiliencePillars;
+  /** Actionable resilience suggestions */
+  recommendations?: ResilienceRecommendation[];
+  /** Executive summary for ops dispatch */
+  auditSummary?: string;
+}
+
+// ---------------------------------------------------------------------------
+// TRAVELER PERSONAS & PREFERENCES
+// Enables personalized ranking of recovery options.
+// ---------------------------------------------------------------------------
+export type TravelerPersonaId =
+  | "balanced"
+  | "budget"
+  | "business"
+  | "minimal-disruption"
+  | "custom";
+
+export interface TravelerPreferences {
+  personaId: TravelerPersonaId;
+  costSensitivity: number;      // 0-100 (100 = minimize added cost)
+  timeUrgency: number;          // 0-100 (100 = arrive as fast as possible)
+  continuityPriority: number;   // 0-100 (100 = protect downstream reservations)
+}
+
+export const PERSONA_PRESETS: Record<
+  Exclude<TravelerPersonaId, "custom">,
+  {
+    name: string;
+    tagline: string;
+    icon: string;
+    preferences: TravelerPreferences;
+  }
+> = {
+  balanced: {
+    name: "Balanced Traveler",
+    tagline: "Equal trade-off between cost, speed, and schedule continuity.",
+    icon: "B",
+    preferences: {
+      personaId: "balanced",
+      costSensitivity: 50,
+      timeUrgency: 50,
+      continuityPriority: 50,
+    },
+  },
+  budget: {
+    name: "Budget Explorer",
+    tagline: "Avoid extra fees at all costs; comfortable with modest delays.",
+    icon: "$",
+    preferences: {
+      personaId: "budget",
+      costSensitivity: 95,
+      timeUrgency: 25,
+      continuityPriority: 60,
+    },
+  },
+  business: {
+    name: "Time-Critical Business",
+    tagline: "Arrive at destination earliest; budget is fully flexible.",
+    icon: "T",
+    preferences: {
+      personaId: "business",
+      costSensitivity: 15,
+      timeUrgency: 95,
+      continuityPriority: 70,
+    },
+  },
+  "minimal-disruption": {
+    name: "Low-Stress / Continuity",
+    tagline: "Keep remaining hotels & tours intact with minimal re-bookings.",
+    icon: "S",
+    preferences: {
+      personaId: "minimal-disruption",
+      costSensitivity: 40,
+      timeUrgency: 40,
+      continuityPriority: 95,
+    },
+  },
+};
+
+// ---------------------------------------------------------------------------
+// WHAT-IF SCENARIO
+// For interactive proactive sandbox simulation.
+// ---------------------------------------------------------------------------
+export interface WhatIfScenario {
+  id: string;
+  name: string;
+  description: string;
+  disruption: Disruption;
+  category: "delay" | "cancellation" | "weather";
 }
 

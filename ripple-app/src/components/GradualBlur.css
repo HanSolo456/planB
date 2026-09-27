@@ -1,0 +1,26 @@
+/* GradualBlur.css */
+.gradual-blur-container {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gradual-blur-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.gradual-blur-inner > div {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-backdrop-filter: inherit;
+  backdrop-filter: inherit;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .gradual-blur-inner > div {
+    background: rgba(255, 255, 255, 0.4);
+    opacity: 0.5;
+  }
+}

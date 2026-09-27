@@ -31,14 +31,14 @@ export const PlanBLogoMark: React.FC<{ size?: number; className?: string }> = ({
       aria-label="planB Logo Mark"
     >
       {/* Background Frame / Ops Stamp */}
-      <rect width="48" height="48" rx="8" fill="#2B5D5C" />
+      <rect width="48" height="48" rx="8" fill="#102A43" />
       <rect
         x="1.5"
         y="1.5"
         width="45"
         height="45"
         rx="6.5"
-        stroke="#3F7E7C"
+        stroke="#2BBCAE"
         strokeWidth="1.5"
       />
 
@@ -72,7 +72,7 @@ export const PlanBLogoMark: React.FC<{ size?: number; className?: string }> = ({
 
       {/* Destination Waypoint (Node B) */}
       <circle cx="36" cy="12" r="3.5" fill="#FFFFFF" />
-      <circle cx="36" cy="12" r="1.5" fill="#2B5D5C" />
+      <circle cx="36" cy="12" r="1.5" fill="#102A43" />
 
       {/* Navigational Flight Delta */}
       <path
@@ -87,8 +87,8 @@ export default function PlanBLogo({
   size = 32,
   className = '',
   showWordmark = true,
-  subtitle = 'Real-time Travel Disruption & Re-accommodation Engine',
-  badge = 'OPS MANIFEST',
+  subtitle = 'Travel disruption, handled.',
+  badge,
 }: PlanBLogoProps) {
   return (
     <div className={`flex items-center gap-3 ${className}`}>
@@ -97,24 +97,12 @@ export default function PlanBLogo({
       {showWordmark && (
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-display text-xl font-bold tracking-tight text-[#1C1B19] leading-none">
+            <span className="font-display text-xl font-bold tracking-tight leading-none" style={{ color: 'var(--color-text-main)' }}>
               planB
             </span>
-            {badge && (
-              <span
-                className="font-mono text-2xs uppercase tracking-widest px-1.5 py-0.5 rounded-[2px]"
-                style={{
-                  backgroundColor: 'var(--color-bg-surface-alt)',
-                  color: 'var(--color-text-muted)',
-                  border: '1px solid var(--color-border)',
-                }}
-              >
-                {badge}
-              </span>
-            )}
           </div>
           {subtitle && (
-            <p className="text-xs text-[#6B6760] mt-0.5 font-normal leading-tight">
+            <p className="hidden sm:block text-xs mt-0.5 font-normal leading-tight" style={{ color: 'var(--color-text-muted)' }}>
               {subtitle}
             </p>
           )}

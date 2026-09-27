@@ -272,14 +272,7 @@ export const itineraryB: Itinerary = {
     // -------------------------------------------------------------------------
     // BOOKING 3: Activity — Amber Fort Guided Tour (9:00 AM sharp)
     // Fixed time slot on Dec 22 (day 2 of Jaipur stay).
-    //
-    // DEPENDENCY DESIGN NOTE:
-    // This activity depends on train_mumbai_jaipur (not the hotel), because
-    // the impact engine uses a booking's ENDTIME as the dependency reference.
-    // Using hotel_jaipur.endTime (checkout: Dec 23 11:00) would make the
-    // Dec 22 09:00 activity appear CRITICAL even without any disruption.
-    // The real constraint: traveler must arrive in Jaipur AND rest overnight.
-    //   train arrives Dec 21 11:00 + 1320 min (22h) = Dec 22 09:00 ✓
+    // Depends directly on hotel_jaipur (check-in Dec 21 12:00).
     // -------------------------------------------------------------------------
     {
       id: "activity_amber_fort",
@@ -289,8 +282,8 @@ export const itineraryB: Itinerary = {
       startTime: ist("2024-12-22", "09:00"),
       endTime:   ist("2024-12-22", "12:30"),
       location: { type: "named", name: "Amber Fort, Jaipur" },
-      dependsOn: ["train_mumbai_jaipur"], // depends on arrival, not hotel checkout
-      bufferMinutes: 1320, // 22 hours — must arrive day before and rest overnight
+      dependsOn: ["hotel_jaipur"],
+      bufferMinutes: 60, // Check-in and settled before activity
       cost: 3500,
       cancellationPolicy: { policy: "partial-refund", cutoffHours: 24, refundPercent: 50 },
       status: "confirmed",
@@ -341,11 +334,7 @@ export const itineraryB: Itinerary = {
     // -------------------------------------------------------------------------
     // BOOKING 6: Activity — Mehrangarh Fort Sunset Tour
     // Fixed 4 PM slot on Dec 24 (day 2 of Jodhpur stay).
-    //
-    // DEPENDENCY DESIGN NOTE:
-    // Same pattern as Amber Fort — depends on train arrival (Dec 23 17:15),
-    // not hotel_jodhpur.endTime (Dec 25 11:00), to avoid false CRITICAL flags.
-    //   train arrives Dec 23 17:15 + 1365 min (~22h45m) = Dec 24 16:00 ✓
+    // Depends directly on hotel_jodhpur (check-in Dec 23 18:00).
     // -------------------------------------------------------------------------
     {
       id: "activity_mehrangarh",
@@ -355,8 +344,8 @@ export const itineraryB: Itinerary = {
       startTime: ist("2024-12-24", "16:00"),
       endTime:   ist("2024-12-24", "18:30"),
       location: { type: "named", name: "Mehrangarh Fort, Jodhpur" },
-      dependsOn: ["train_jaipur_jodhpur"], // depends on arrival, not hotel checkout
-      bufferMinutes: 1365, // ~22h45m — arrive day before, overnight rest + travel to fort
+      dependsOn: ["hotel_jodhpur"],
+      bufferMinutes: 60, // Check-in and settled before activity
       cost: 2200,
       cancellationPolicy: { policy: "partial-refund", cutoffHours: 24, refundPercent: 30 },
       status: "confirmed",

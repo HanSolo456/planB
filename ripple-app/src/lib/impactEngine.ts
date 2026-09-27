@@ -52,6 +52,38 @@ function buildBookingMap(bookings: Booking[]): Map<string, Booking> {
 }
 
 // ---------------------------------------------------------------------------
+// UTILITY: getHotelReferenceTime
+//
+// Returns the correct "completed at" reference time for a booking when used
+// as a dependency by a downstream segment.
+//
+// WHY THIS EXISTS:
+//   For flights, trains, and transfers the traveller is physically "done" at
+//   the endTime (arrival / drop-off).  Downstream segments must start after
+//   that moment + their required buffer.
+//
+//   For hotels the semantics are different.  The hotel's endTime is CHECKOUT
+//   (e.g. 11:00 on the last day).  But activities and transports that happen
+//   DURING the stay don't need to wait until checkout — they need the traveller
+//   to have ARRIVED (check-in = startTime).  Using endTime (checkout) as the
+//   reference makes mid-stay activities appear impossibly far in the past and
+//   generates false broken/at-risk results.
+//
+//   The one exception — a booking that explicitly departs FROM the hotel
+//   (return flight, outbound train) — also depends on the hotel, but uses
+//   bufferMinutes measured from checkout.  Those still work correctly:
+//   using startTime (check-in) as reference only makes the buffer appear
+//   *larger* (more generous) for the return leg, which is safe — the actual
+//   risk for that connection is captured via its large bufferMinutes value
+//   (e.g. 150 min for "checkout at 11:00, airport by 12:30").
+// ---------------------------------------------------------------------------
+function getHotelReferenceTime(booking: Booking): Date {
+  return parseTime(
+    booking.type === 'hotel' ? booking.startTime : booking.endTime
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UTILITY: Build the REVERSE dependency graph.
 //
 // Forward graph:  transfer dependsOn → [flight]
@@ -230,12 +262,14 @@ export function detectImpact(
     // For non-disrupted bookings: check if any of their dependencies
     // have cascading delays that affect this booking's feasibility.
     if (booking.dependsOn.length === 0) {
-      // No dependencies: effective end time = original end time
-      effectiveEndTimes.set(bookingId, parseTime(booking.endTime));
+      // No dependencies: store the correct reference time for THIS booking's type.
+      // Hotels store startTime (check-in) — see getHotelReferenceTime() for rationale.
+      effectiveEndTimes.set(bookingId, getHotelReferenceTime(booking));
       continue;
     }
 
-    // Find the latest "effective end" among all direct dependencies
+    // Find the latest effective reference time among all direct dependencies.
+    // Each dependency contributes its own type-correct reference time.
     let latestDepEndTime: Date | null = null;
     for (const depId of booking.dependsOn) {
       const depEffectiveEnd = effectiveEndTimes.get(depId);
@@ -269,10 +303,16 @@ export function detectImpact(
         parseTime(booking.endTime)
       );
       const effectiveEnd = addMinutes(effectiveStart, originalDuration);
-      effectiveEndTimes.set(bookingId, effectiveEnd);
+      // Store the type-correct reference time for THIS (now-shifted) booking.
+      // For hotels: effectiveStart IS the shifted check-in → store that.
+      // For others: store effectiveEnd (arrival time after the pushed duration).
+      effectiveEndTimes.set(
+        bookingId,
+        booking.type === 'hotel' ? effectiveStart : effectiveEnd
+      );
     } else {
-      // Buffer is fine: effective end = original end
-      effectiveEndTimes.set(bookingId, parseTime(booking.endTime));
+      // Buffer is fine: store type-correct reference time.
+      effectiveEndTimes.set(bookingId, getHotelReferenceTime(booking));
     }
   }
 
@@ -384,7 +424,8 @@ export function getAtRiskConnections(
       const depBooking = bookingMap.get(depId);
       if (!depBooking) continue;
 
-      const depEnd = parseTime(depBooking.endTime);
+      // Use the type-correct reference time: check-in for hotels, arrival for others.
+      const depEnd = getHotelReferenceTime(depBooking);
       const bookingStart = parseTime(booking.startTime);
       const availableBuffer = minutesBetween(depEnd, bookingStart);
       const shortfall = booking.bufferMinutes - availableBuffer;
@@ -429,9 +470,18 @@ export function getAtRiskConnections(
 // Computes an overall itinerary scheduling robustness score (0-100).
 // 100 = perfectly resilient / safe schedule.
 //
+// Optionally accepts `disruptions` to score the POST-DISRUPTION state:
+//   - Delay disruptions: shifts the affected booking's endTime forward so
+//     that downstream buffer gaps are correctly widened in the analysis.
+//   - Cancellation disruptions: removes the booking entirely so every
+//     downstream booking that dependsOn it becomes orphaned / broken.
+//   - Each impacted booking in `impactedBookings` adds an extra flat penalty
+//     (broken = -25 pts, at-risk = -10 pts) on top of the buffer analysis.
+//
 // Uses getAtRiskConnections(itinerary) as the base ground-truth signal.
 // Calibrated weights:
-//   - Critical connection (buffer shortfall): 42 pts
+//   - Critical connection (buffer shortfall): 20 pts base + 1 pt per
+//     shortfall minute, capped at 40 pts total
 //   - Tight connection with 0 min surplus: 28 pts (razor-thin, zero slack)
 //   - Tight connection with 1-15 min surplus: 20 pts
 //   - Tight connection with 16-30 min surplus: 14 pts
@@ -448,11 +498,38 @@ export function getAtRiskConnections(
 //   - 'moderate': 40 <= score < 75
 //   - 'high': score < 40
 // =============================================================================
-export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
-  const atRiskConns = getAtRiskConnections(itinerary);
+export function calculateTripRiskScore(
+  itinerary: Itinerary,
+  disruptions?: Disruption[],
+  impactedBookings?: ImpactedBooking[]
+): TripRiskScore {
+  // Build a virtual itinerary snapshot that reflects active disruptions.
+  // This is done purely for the buffer-gap calculation below — the original
+  // itinerary object is never mutated.
+  let scoringItinerary: Itinerary = itinerary;
+  if (disruptions && disruptions.length > 0) {
+    const cancelledIds = new Set(
+      disruptions.filter((d) => d.disruptionType === 'cancellation').map((d) => d.bookingId)
+    );
+    const virtualBookings: Booking[] = itinerary.bookings
+      .filter((b) => !cancelledIds.has(b.id))
+      .map((b) => {
+        const delay = disruptions.find(
+          (d) => d.bookingId === b.id && d.disruptionType === 'delay'
+        );
+        if (delay && delay.delayMinutes) {
+          // Shift endTime forward by the delay so downstream buffers collapse
+          const shiftedEnd = addMinutes(parseTime(b.endTime), delay.delayMinutes);
+          return { ...b, endTime: shiftedEnd.toISOString() };
+        }
+        return b;
+      });
+    scoringItinerary = { ...itinerary, bookings: virtualBookings };
+  }
+  const atRiskConns = getAtRiskConnections(scoringItinerary);
 
   const BASE_WEIGHTS = {
-    critical: 42,
+    critical: 20,
     zeroSlack: 28,
     moderateSlack: 20,
     comfortableSlack: 14,
@@ -469,7 +546,7 @@ export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
     let baseReason = "";
 
     if (isCritical) {
-      rawPoints = BASE_WEIGHTS.critical;
+      rawPoints = BASE_WEIGHTS.critical + Math.min(20, conn.bufferShortfallMinutes);
       baseReason = `Infeasible schedule: ${conn.bufferShortfallMinutes} min shortfall before start time.`;
     } else if (surplus <= 0) {
       rawPoints = BASE_WEIGHTS.zeroSlack;
@@ -516,15 +593,230 @@ export function calculateTripRiskScore(itinerary: Itinerary): TripRiskScore {
     (sum, item) => sum + item.riskContribution,
     0
   );
-  const overallScore = Math.max(0, Math.min(100, 100 - totalDeductions));
+
+  // Extra flat penalty per disrupted booking (layered on top of buffer gaps).
+  // broken = -25 pts each, at-risk = -10 pts each.
+  const disruptionPenalty = (impactedBookings ?? []).reduce((sum, ib) => {
+    return sum + (ib.severity === 'broken' ? 25 : 10);
+  }, 0);
+
+  const bufferScore = Math.max(0, Math.min(100, 100 - totalDeductions - disruptionPenalty));
+
+  // --- PILLAR 2: Financial Cancellation Exposure (25%) ---
+  const totalCost = itinerary.bookings.reduce((sum, b) => sum + (b.cost || 0), 0);
+  let nonRefundableCost = 0;
+  for (const b of itinerary.bookings) {
+    if (b.cancellationPolicy?.policy === "non-refundable") {
+      nonRefundableCost += b.cost || 0;
+    } else if (b.cancellationPolicy?.policy === "partial-refund") {
+      const refundPercent = b.cancellationPolicy.refundPercent ?? 50;
+      nonRefundableCost += Math.round((b.cost || 0) * (1 - refundPercent / 100));
+    }
+  }
+  const nonRefundablePercent = totalCost > 0 ? Math.round((nonRefundableCost / totalCost) * 100) : 0;
+  // Score: 100 = fully refundable, scaled down to 30 if 100% non-refundable
+  const financialScore = Math.round(Math.max(25, 100 - (nonRefundablePercent * 0.72)));
+
+  // --- PILLAR 3: Critical Path & Single Point of Failure (25%) ---
+  // Identify chokepoint bookings that have 2 or more downstream bookings depending on them
+  const downstreamCounts = new Map<string, number>();
+  for (const b of itinerary.bookings) {
+    for (const depId of b.dependsOn) {
+      downstreamCounts.set(depId, (downstreamCounts.get(depId) ?? 0) + 1);
+    }
+  }
+
+  const chokepointBookings: Booking[] = [];
+  for (const [bId, count] of downstreamCounts.entries()) {
+    if (count >= 2) {
+      const found = itinerary.bookings.find((b) => b.id === bId);
+      if (found) chokepointBookings.push(found);
+    }
+  }
+
+  // Chokepoints with tight buffers or high penalties degrade critical path health
+  let criticalPathPenalty = 0;
+  for (const cp of chokepointBookings) {
+    const isAtRisk = atRiskConns.some((c) => c.booking.id === cp.id || c.dependencyBooking.id === cp.id);
+    criticalPathPenalty += isAtRisk ? 28 : 12;
+  }
+  const criticalPathScore = Math.max(30, Math.min(100, 100 - criticalPathPenalty));
+
+  // --- PILLAR 4: Alternative Redundancy & Recovery Slack (15%) ---
+  // Legs arriving late at night (>20:00) have low same-day redundancy
+  let lateArrivalCount = 0;
+  for (const b of itinerary.bookings) {
+    if (b.type === "flight" || b.type === "train") {
+      const endHour = new Date(b.endTime).getHours();
+      if (endHour >= 20 || endHour <= 4) {
+        lateArrivalCount++;
+      }
+    }
+  }
+  const redundancyPenalty = lateArrivalCount * 18;
+  const redundancyScore = Math.max(35, Math.min(100, 100 - redundancyPenalty));
+
+  // `overallScore` remains the connection-based Trip Risk Score. The audit
+  // factors below are supplementary context and must never replace it with a
+  // weighted composite.
+  const overallScore = bufferScore;
 
   const level: "low" | "moderate" | "high" =
     overallScore >= 75 ? "low" : overallScore >= 40 ? "moderate" : "high";
+
+  // --- ACTIONABLE RESILIENCE RECOMMENDATIONS ---
+  const recommendations: import("./types").ResilienceRecommendation[] = [];
+
+  if (atRiskConns.length > 0) {
+    const worst = atRiskConns[0];
+    const surplus = worst.bufferRemaining - worst.booking.bufferMinutes;
+    const recommendedExtension = Math.max(30, 45 - Math.max(0, surplus));
+    recommendations.push({
+      id: `rec-buffer-${worst.booking.id}`,
+      type: "buffer",
+      title: `Extend ${worst.booking.title.split(" — ")[0]} transfer buffer by +${recommendedExtension} min`,
+      description: `Current connection has only ${worst.bufferRemaining}m slack. Adding a ${recommendedExtension}m buffer absorbs upstream flight/train delays safely.`,
+      targetBookingId: worst.booking.id,
+    });
+  }
+
+  if (nonRefundablePercent >= 40) {
+    recommendations.push({
+      id: "rec-policy-protection",
+      type: "policy",
+      title: `Protect ₹${nonRefundableCost.toLocaleString("en-IN")} in non-refundable bookings`,
+      description: `${nonRefundablePercent}% of itinerary spend has zero cancellation refund. Consider flexible rebooking protection or travel delay insurance.`,
+    });
+  }
+
+  if (chokepointBookings.length > 0) {
+    const cp = chokepointBookings[0];
+    recommendations.push({
+      id: `rec-chokepoint-${cp.id}`,
+      type: "routing",
+      title: `Decouple secondary activities from ${cp.title.split(" — ")[0]}`,
+      description: `${downstreamCounts.get(cp.id)} subsequent activities depend directly on this leg. Allow independent scheduling to prevent single-point-of-failure cascades.`,
+      targetBookingId: cp.id,
+    });
+  }
+
+  const pillars: import("./types").ResiliencePillars = {
+    bufferHealth: {
+      score: bufferScore,
+      weight: 0.35,
+      label: "Buffer & Slack Health",
+      description: `${atRiskConns.length === 0 ? "All connection windows meet buffer targets." : `${atRiskConns.length} connection(s) operate under tight timing margins.`}`,
+      tightConnectionsCount: atRiskConns.length,
+    },
+    financialExposure: {
+      score: financialScore,
+      weight: 0.25,
+      nonRefundableTotal: nonRefundableCost,
+      nonRefundablePercent,
+      label: "Cancellation & Refund Protection",
+      description: `₹${nonRefundableCost.toLocaleString("en-IN")} (${nonRefundablePercent}% of trip) is non-refundable if disrupted.`,
+    },
+    criticalPathRisk: {
+      score: criticalPathScore,
+      weight: 0.25,
+      chokepointsCount: chokepointBookings.length,
+      chokepointLabels: chokepointBookings.map((b) => b.title.split(" — ")[0]),
+      label: "Single Point of Failure / Hubs",
+      description: `${chokepointBookings.length} hub booking(s) hold up downstream branches.`,
+    },
+    alternativeRedundancy: {
+      score: redundancyScore,
+      weight: 0.15,
+      label: "Same-Day Redundancy",
+      description: `${lateArrivalCount === 0 ? "Favorable flight arrival times with ample same-day rebooking options." : `${lateArrivalCount} late-night arrival(s) limit same-day recovery options.`}`,
+    },
+  };
+
+  const auditSummary =
+    atRiskConns.length === 0
+      ? `Schedule buffers meet their targets. ${nonRefundablePercent}% of trip spend remains exposed to cancellation terms.`
+      : `${atRiskConns.length} connection(s) need attention. The factor detail below identifies buffer, financial, dependency, and recovery considerations.`;
 
   return {
     overallScore,
     level,
     legRisks,
+    pillars,
+    recommendations,
+    auditSummary,
   };
 }
 
+// =============================================================================
+// ADDITIVE EXPORT: detectCombinedImpact
+//
+// Handles up to 3 concurrent disruptions on the same itinerary.
+// Calls the existing detectImpact() once per disruption — NO logic duplication.
+//
+// Merge rules for a booking that appears in multiple impact sets:
+//   severity            → worst across all (broken > at-risk)
+//   bufferShortfallMins → Math.max() of all  (worst case, NOT sum — avoids double-count)
+//   reason              → all causes concatenated clearly
+//   compoundDisruptionCount → 2  (powers the compound badge; always 2 = "multi-factor")
+//
+// Single-disruption passthrough:
+//   When disruptions.length === 1, every booking falls into the
+//   "only in A" branch → output is identical to detectImpact().
+//
+// DOES NOT MODIFY detectImpact. Safe to call alongside it.
+// =============================================================================
+export function detectCombinedImpact(
+  itinerary: Itinerary,
+  disruptions: Disruption[]
+): ImpactedBooking[] {
+  if (disruptions.length === 0) return [];
+
+  // Single-disruption passthrough: identical to existing detectImpact path
+  if (disruptions.length === 1) {
+    return detectImpact(itinerary, disruptions[0]);
+  }
+
+  // Run independent BFS traversals for each disruption (up to 3 supported)
+  const allResults = disruptions.map((d) => detectImpact(itinerary, d));
+
+  // Build O(1) lookup maps keyed by bookingId, one per disruption
+  const allMaps = allResults.map(
+    (result) => new Map<string, ImpactedBooking>(result.map((ib) => [ib.booking.id, ib]))
+  );
+
+  // Union of all affected booking IDs across every disruption
+  const allIds = new Set<string>(allMaps.flatMap((m) => [...m.keys()]));
+
+  const merged: ImpactedBooking[] = [];
+
+  for (const id of allIds) {
+    const hits = allMaps.map((m) => m.get(id)).filter((x): x is ImpactedBooking => x !== undefined);
+
+    if (hits.length === 1) {
+      // Only one disruption impacts this booking — pass through unchanged
+      merged.push(hits[0]);
+    } else {
+      // COMPOUND: multiple disruptions hit this booking
+      // Rule 1: severity — take the worst (broken > at-risk)
+      const severity: 'at-risk' | 'broken' =
+        hits.some((h) => h.severity === 'broken') ? 'broken' : 'at-risk';
+
+      // Rule 2: bufferShortfallMinutes — take max (worst-case, NOT sum)
+      const bufferShortfallMinutes = Math.max(...hits.map((h) => h.bufferShortfallMinutes));
+
+      // Rule 3: reason — all causes, clearly labelled
+      const reason = `Broken by ${hits.length} factors: ` +
+        hits.map((h, i) => `[Factor ${i + 1}: ${h.reason}]`).join(' AND ');
+
+      merged.push({
+        booking: hits[0].booking, // all hits refer to the same source booking
+        reason,
+        bufferShortfallMinutes,
+        severity,
+        compoundDisruptionCount: 2, // UI badge: always 2 = "multi-factor compound"
+      });
+    }
+  }
+
+  return merged;
+}

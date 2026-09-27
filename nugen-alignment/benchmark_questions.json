@@ -1,0 +1,52 @@
+[
+  {
+    "sample_num": 1,
+    "instruction": "What is an Irregular Operation (IROPS) in travel logistics, and how does planB model an itinerary to compute cascading delays?",
+    "response": "An Irregular Operation (IROPS) occurs when travel services deviate from schedule due to external events such as adverse weather, air traffic control congestion, technical failures, or cancellations. In planB, an itinerary is modeled as a Directed Acyclic Graph (DAG) where nodes represent individual bookings (flights, trains, transfers, hotels, activities) and directed edges represent temporal dependencies (dependsOn). Each dependency edge contains a non-negotiable buffer constraint representing the minimum required transition time (e.g., 45 minutes for baggage claim and deplaning). When an upstream node is disrupted, the engine propagates the delay forward through downstream edges. If the actual arrival gap drops below the required buffer (slack < 0), downstream bookings are flagged as at-risk or disrupted, and automated recovery strategies (Slide, Swap, or Rebook) are synthesized."
+  },
+  {
+    "sample_num": 2,
+    "instruction": "A passenger lands on flight 6E-301 at GOI Dabolim airport at 12:15 PM instead of the scheduled 09:15 AM (180-minute delay). Their pre-booked private cab was scheduled for 10:00 AM, and they have an unchangeable boat excursion starting at 01:30 PM from Vagator Jetty (a 75-minute drive from GOI). Explain the chain of ripple impacts on this itinerary.",
+    "response": "1. Upstream Disruption: Flight 6E-301 arrives at 12:15 PM (+180 minutes).\n2. Airport Buffer & Transfer Impact: Deplaning and baggage claim require a minimum 45-minute buffer, making the passenger curbside-ready at 01:00 PM. The 10:00 AM pre-booked cab is missed and must be rescheduled to 01:00 PM.\n3. Road Transit: The drive from GOI Dabolim to Vagator Jetty takes 75 minutes. Departing at 01:00 PM results in an estimated arrival time of 02:15 PM at Vagator.\n4. Excursion Impact: The boat excursion commences at 01:30 PM. The passenger arrives 45 minutes after departure, causing a complete breach of the activity booking (Disrupted state).\n5. Recommended Recovery: Immediately notify the cab provider to reschedule pickup to 01:00 PM. Contact the boat operator before arrival to request a reschedule to Day 2 morning under the disruption grace policy, preventing 100% ticket forfeiture."
+  },
+  {
+    "sample_num": 3,
+    "instruction": "Under DGCA India Passenger Charter regulations, what statutory compensation and care must an airline provide if a flight from Mumbai to Delhi with a 2-hour-15-minute block time is cancelled at the airport without prior notice due to an operational maintenance issue?",
+    "response": "Under DGCA CAR Section 3, Series M, Part IV:\n1. Care: The airline must provide immediate free meals, refreshments, and hotel accommodation (if the alternate flight departs the next day or after 6+ hours during night hours) along with airport transfers.\n2. Rerouting / Refund: The airline must provide either an alternate flight on the carrier or an interline partner at the earliest convenience, or a 100% full refund of the ticket value.\n3. Financial Compensation: Since the cancellation was announced without 24 hours prior notice and was caused by an operational/maintenance issue within the airline's control (not force majeure), for a block time exceeding 2 hours, the passenger is entitled to statutory compensation of ₹10,000 or the one-way basic fare plus fuel surcharge, whichever is lower."
+  },
+  {
+    "sample_num": 4,
+    "instruction": "What is the difference between Single PNR and Split PNR (self-transfer) connecting flights when a delay occurs on the first leg?",
+    "response": "Under a Single PNR (through-ticketed booking), the airline or alliance has a legal and contractual obligation to protect the passenger's journey. If Leg 1 is delayed causing a missed connection on Leg 2, the operating carrier must rebook the passenger onto the next available flight at no additional cost, transfer checked luggage automatically, and provide meals or hotel accommodation if required.\n\nUnder a Split PNR (self-transfer on two separate tickets), airlines treat each flight as an independent contract. If Leg 1 arrives late, the passenger is marked as a 'No-Show' on Leg 2, resulting in complete forfeiture of the onward ticket without free rebooking or compensation. Passengers using Split PNRs must maintain a minimum self-transfer buffer of 180 minutes for domestic connections and 240 minutes for international connections to account for baggage claim, inter-terminal transfers, and security re-screening."
+  },
+  {
+    "sample_num": 5,
+    "instruction": "A traveler has a multi-day hotel booking in Goa starting on Friday. Due to severe flight cancellations, they cannot arrive until Saturday morning. What critical hotel risk occurs if no action is taken, and how does planB mitigate this?",
+    "response": "The critical risk is a 'No-Show' automatic cancellation. Most hotel property management systems (PMS) automatically mark reservations as No-Show if the guest fails to check in before 23:59 on the scheduled arrival date. This results in the forfeiture of the first night's fee (or the full deposit) and the automatic release of all remaining booked nights (Saturday and Sunday).\n\nplanB mitigates this by detecting that the arrival ETA exceeds the hotel's check-in threshold (past 21:00 or rolling into the next calendar day). It generates an automated 'Late Check-in Guarantee Notice' transmitted to the hotel front desk, confirming the traveler's updated Saturday morning arrival, securing the room, and preventing the cancellation of subsequent nights."
+  },
+  {
+    "sample_num": 6,
+    "instruction": "Why is distinguishing between Goa Dabolim Airport (GOI) and Manohar International Airport Mopa (GOX) critical when computing transfer buffers and cascading delays for an itinerary in North Goa?",
+    "response": "Goa has two separate airports located at opposite ends of the state:\n- Dabolim (GOI) is located in South-Central Goa, approximately 45–50 km from popular North Goa destinations (Candolim, Vagator, Anjuna), with driving times of 75–90 minutes depending on Panaji bridge traffic.\n- Manohar International Airport Mopa (GOX) is located in extreme North Goa (Pernem), only 25–35 km from North Goa destinations, with driving times of 35–50 minutes.\n\nIf an itinerary or transport provider mistakenly assumes GOI instead of GOX (or vice versa), the transit calculation has an error margin of 40 to 60 minutes. In tight dependency schedules, this error immediately causes buffer breach, resulting in missed restaurant reservations, late check-in penalties, or missed excursion departures."
+  },
+  {
+    "sample_num": 7,
+    "instruction": "Parse the following user message and extract the structured disruption details: 'Hey, SpiceJet just texted that SG-8169 from Delhi to Goa is delayed by 140 minutes due to bad weather at DEL.'",
+    "response": "{\n  \"bookingId\": \"SG-8169\",\n  \"serviceName\": \"SpiceJet SG-8169 DEL-GOI\",\n  \"type\": \"delay\",\n  \"delayMinutes\": 140,\n  \"reason\": \"Adverse weather conditions causing ground delay at Delhi (DEL)\",\n  \"severity\": \"high\",\n  \"requiresBufferAudit\": true,\n  \"carrierLiability\": \"Force majeure (meteorological) - meals required after 2-3 hours; statutory cash compensation exempt.\"\n}"
+  },
+  {
+    "sample_num": 8,
+    "instruction": "Explain the difference between the three automated recovery strategies: 'Slide Schedule', 'Swap Leg', and 'Emergency Rebook & Refund'.",
+    "response": "1. Slide Schedule: Preserves all existing bookings by shifting their time slots later in the timeline without changing providers. Ideal when downstream partners (flexible check-in hotels, private drivers, open-ticket attractions) accommodate delays without rebooking fees. Minimal financial cost.\n2. Swap Leg: Replaces a specific bottlenecked leg with an alternate mode of transit or moves an activity to another open slot in the itinerary (e.g., swapping Day 1 afternoon tour with Day 2 morning relaxation) to preserve overall trip integrity. Balances time recovery against modest delta costs.\n3. Emergency Rebook & Refund: Used when an upstream cancellation or catastrophic delay breaks downstream non-refundable deadlines. It immediately cancels unviable bookings before cutoff deadlines expire to claim maximum refunds, notifies hotels to prevent no-show forfeiture, and books the earliest guaranteed alternate transportation."
+  },
+  {
+    "sample_num": 9,
+    "instruction": "What are the recommended minimum buffer times for: (1) Domestic flight deplaning to private cab pickup, (2) International flight arrival to domestic connection, and (3) Hotel check-in to scheduled dinner reservation?",
+    "response": "1. Domestic Flight to Private Cab Pickup: Minimum 45 minutes for passengers with checked baggage (accounts for taxiway taxi time, aircraft door opening, baggage conveyor delivery, and walk to pickup zone); 30 minutes for carry-on only.\n2. International Flight Arrival to Domestic Connection: Minimum 90 to 120 minutes (accounts for immigration queue, baggage retrieval, customs clearance, terminal transfer, and airline re-check-in / security screening).\n3. Hotel Check-in to Dinner Reservation: Minimum 60 minutes (accounts for front desk key issuance, bellhop luggage delivery, room unpacking, freshening up, and local transit to the dining venue)."
+  },
+  {
+    "sample_num": 10,
+    "instruction": "A passenger's flight is delayed by 45 minutes, but the scheduled buffer before their next transfer was 60 minutes. Does this disruption cause a downstream cascade failure? Justify your reasoning.",
+    "response": "No, this disruption does not cause a downstream cascade failure. \n\nReasoning:\n- Original Scheduled Buffer = 60 minutes.\n- Delay Duration = 45 minutes.\n- Remaining Slack = 60 minutes - 45 minutes = 15 minutes of positive buffer remaining.\n\nSince the remaining slack is greater than zero (and meets the minimum 15-minute tolerance margin), the passenger can still complete baggage claim and reach the transfer vehicle without delaying the downstream booking. The system will categorize this disruption as 'LOW severity', keep the downstream bookings in 'confirmed' status, and send a proactive notification advising the driver of the revised landing time."
+  }
+]

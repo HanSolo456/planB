@@ -14,10 +14,10 @@ export default function ItineraryTabs({ itineraries }: Props) {
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-2.5">
-        <p className="font-mono text-2xs uppercase tracking-wider text-[#6B6760] font-semibold">
+        <p className="font-mono text-2xs uppercase tracking-wider text-[#4A5568] font-semibold">
           ACTIVE MANIFEST / DISPATCH SCHEDULE
         </p>
-        <span className="font-mono text-2xs text-[#969188]">
+        <span className="font-mono text-2xs text-[#8896A4]">
           {itineraries.length} ITINERARIES LOADED
         </span>
       </div>
@@ -45,15 +45,15 @@ export default function ItineraryTabs({ itineraries }: Props) {
                   <span
                     className="w-2 h-2 rounded-full"
                     style={{
-                      backgroundColor: isSelected ? 'var(--color-confirmed)' : '#969188',
+                      backgroundColor: isSelected ? 'var(--color-confirmed)' : '#8896A4',
                     }}
                   />
-                  <span style={{ color: isSelected ? 'var(--color-confirmed)' : '#6B6760' }}>
+                  <span style={{ color: isSelected ? 'var(--color-confirmed)' : '#4A5568' }}>
                     {isSelected ? 'ACTIVE DISPATCH' : 'IN RESERVE'}
                   </span>
                 </div>
 
-                <span className="font-mono text-2xs text-[#969188]">
+                <span className="font-mono text-2xs text-[#8896A4]">
                   ID: {it.id.toUpperCase()}
                 </span>
               </div>
@@ -61,24 +61,24 @@ export default function ItineraryTabs({ itineraries }: Props) {
               {/* Destination in serif */}
               <h2
                 className="font-display text-lg font-bold leading-tight mb-2"
-                style={{ color: isSelected ? '#1C1B19' : '#6B6760' }}
+                style={{ color: isSelected ? '#17212B' : '#4A5568' }}
               >
                 {it.destination}
               </h2>
 
               {/* Manifest summary data */}
-              <div className="space-y-1 text-xs text-[#6B6760]">
+              <div className="space-y-1 text-xs text-[#4A5568]">
                 <div className="flex items-center gap-1.5 font-mono">
-                  <Calendar size={12} className="text-[#969188] flex-shrink-0" />
+                  <Calendar size={12} className="text-[#8896A4] flex-shrink-0" />
                   <span>{formatDateRange(it.startDate, it.endDate)}</span>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 mt-2 border-t border-[#EBE7DF] font-mono text-2xs text-[#6B6760]">
+                <div className="flex items-center justify-between pt-2 mt-2 border-t border-[#EBE7DF] font-mono text-2xs text-[#4A5568]">
                   <span className="flex items-center gap-1">
-                    <User size={10} className="text-[#969188]" />
+                    <User size={10} className="text-[#8896A4]" />
                     {it.travelerName}
                   </span>
-                  <span className="font-semibold text-[#1C1B19]">
+                  <span className="font-semibold text-[#17212B]">
                     {it.bookings.length} LEGS / BOOKINGS
                   </span>
                 </div>
@@ -99,7 +99,7 @@ export default function ItineraryTabs({ itineraries }: Props) {
         }}
         onMouseEnter={(e) => {
           (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-confirmed)';
-          (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#F5FBF8';
+          (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#E8EEF4';
         }}
         onMouseLeave={(e) => {
           (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--color-border)';
@@ -113,12 +113,12 @@ export default function ItineraryTabs({ itineraries }: Props) {
               style={{ color: 'var(--color-confirmed)' }}>
               IMPORT YOUR OWN TRIP
             </p>
-            <p className="font-mono text-2xs text-[#969188]">
+            <p className="font-mono text-2xs text-[#8896A4]">
               Paste a booking confirmation to extract an itinerary
             </p>
           </div>
         </div>
-        <span className="font-mono text-2xs text-[#969188] group-hover:text-[#1C1B19] transition-colors">
+        <span className="font-mono text-2xs text-[#8896A4] group-hover:text-[#17212B] transition-colors">
           →
         </span>
       </button>

@@ -51,6 +51,19 @@ function buildBookingMap(bookings: Booking[]): Map<string, Booking> {
 }
 
 // ---------------------------------------------------------------------------
+// UTILITY: getHotelReferenceTime
+//
+// Returns the correct "completed at" reference time for a booking when used
+// as a dependency by a downstream segment.
+// For hotels, this is startTime (check-in), not endTime (checkout).
+// ---------------------------------------------------------------------------
+function getHotelReferenceTime(booking: Booking): Date {
+  return parseTime(
+    booking.type === 'hotel' ? booking.startTime : booking.endTime
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UTILITY: Build the REVERSE dependency graph.
 //
 // Forward graph:  transfer dependsOn → [flight]
@@ -229,8 +242,8 @@ export function detectImpact(
     // For non-disrupted bookings: check if any of their dependencies
     // have cascading delays that affect this booking's feasibility.
     if (booking.dependsOn.length === 0) {
-      // No dependencies: effective end time = original end time
-      effectiveEndTimes.set(bookingId, parseTime(booking.endTime));
+      // No dependencies: store type-correct reference time
+      effectiveEndTimes.set(bookingId, getHotelReferenceTime(booking));
       continue;
     }
 
@@ -268,10 +281,13 @@ export function detectImpact(
         parseTime(booking.endTime)
       );
       const effectiveEnd = addMinutes(effectiveStart, originalDuration);
-      effectiveEndTimes.set(bookingId, effectiveEnd);
+      effectiveEndTimes.set(
+        bookingId,
+        booking.type === 'hotel' ? effectiveStart : effectiveEnd
+      );
     } else {
-      // Buffer is fine: effective end = original end
-      effectiveEndTimes.set(bookingId, parseTime(booking.endTime));
+      // Buffer is fine: store type-correct reference time
+      effectiveEndTimes.set(bookingId, getHotelReferenceTime(booking));
     }
   }
 
@@ -383,7 +399,7 @@ export function getAtRiskConnections(
       const depBooking = bookingMap.get(depId);
       if (!depBooking) continue;
 
-      const depEnd = parseTime(depBooking.endTime);
+      const depEnd = getHotelReferenceTime(depBooking);
       const bookingStart = parseTime(booking.startTime);
       const availableBuffer = minutesBetween(depEnd, bookingStart);
       const shortfall = booking.bufferMinutes - availableBuffer;

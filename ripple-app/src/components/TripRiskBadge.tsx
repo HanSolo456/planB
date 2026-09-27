@@ -7,9 +7,11 @@
 // =============================================================================
 
 import { useState, useMemo } from 'react';
-import { ShieldAlert, ShieldCheck, Shield, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, ChevronDown, ChevronUp, AlertCircle, Sparkles } from 'lucide-react';
 import type { Itinerary } from '../lib/types';
 import { calculateTripRiskScore } from '../lib/impactEngine';
+import ResilienceAuditModal from './ResilienceAuditModal';
+import { useAppState } from '../App';
 
 interface Props {
   itinerary: Itinerary;
@@ -17,9 +19,17 @@ interface Props {
 
 export default function TripRiskBadge({ itinerary }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const { activeDisruptions, impactedBookings } = useAppState();
 
-  // Recompute live whenever the itinerary changes (tab switch, recovery applied, or import)
-  const riskScore = useMemo(() => calculateTripRiskScore(itinerary), [itinerary]);
+  // Recompute live whenever the itinerary or active disruptions change.
+  // When disruptions are active the score reflects the post-disruption state:
+  // delayed bookings have their endTime shifted, cancelled ones are removed,
+  // and each impacted booking adds a flat penalty to the score.
+  const riskScore = useMemo(
+    () => calculateTripRiskScore(itinerary, activeDisruptions, impactedBookings),
+    [itinerary, activeDisruptions, impactedBookings]
+  );
 
   const { overallScore, level, legRisks } = riskScore;
 
@@ -85,10 +95,10 @@ export default function TripRiskBadge({ itinerary }: Props) {
 
             <div>
               <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className="font-mono text-2xs uppercase tracking-widest font-bold text-[#969188]">
+                <span className="font-mono text-2xs uppercase tracking-widest font-bold text-[#8896A4]">
                   TRIP RESILIENCE GAUGE
                 </span>
-                <span className="font-mono text-2xs text-[#969188]">·</span>
+                <span className="font-mono text-2xs text-[#8896A4]">·</span>
                 <span
                   className="font-mono text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-[2px]"
                   style={{
@@ -102,22 +112,22 @@ export default function TripRiskBadge({ itinerary }: Props) {
               </div>
 
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-3xl font-bold tracking-tight text-[#1C1B19]">
+                <span className="font-mono text-3xl font-bold tracking-tight text-[#17212B]">
                   {overallScore}
                 </span>
-                <span className="font-mono text-sm text-[#969188]">/100</span>
-                <span className="text-xs text-[#6B6760] font-body ml-2 hidden md:inline">
+                <span className="font-mono text-sm text-[#8896A4]">/100</span>
+                <span className="text-xs text-[#4A5568] font-body ml-2 hidden md:inline">
                   {config.subtext}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Right: Discrete Segment Gauge & Expand Toggle */}
-          <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-[#EBE7DF]">
+          {/* Right: Discrete Segment Gauge & Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-[#EBE7DF]">
             {/* Segmented Terminal Meter */}
-            <div className="flex flex-col items-start sm:items-end gap-1">
-              <span className="font-mono text-2xs uppercase text-[#969188]">
+            <div className="flex items-center justify-between sm:flex-col sm:items-end gap-1.5 w-full sm:w-auto">
+              <span className="font-mono text-2xs uppercase text-[#8896A4]">
                 BUFFER INTEGRITY
               </span>
               <div className="flex items-center gap-1" aria-label={`Score: ${overallScore} out of 100`}>
@@ -137,30 +147,44 @@ export default function TripRiskBadge({ itinerary }: Props) {
               </div>
             </div>
 
-            {/* Expand / Details Toggle Button */}
-            {legRisks.length > 0 ? (
+            {/* Actions: Audit Report + Vulnerabilities Buttons */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Audit Report Modal Trigger */}
               <button
                 type="button"
-                id="toggle-risk-breakdown-btn"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="font-mono text-2xs uppercase tracking-wider font-semibold px-3 py-2 rounded-[2px] border flex items-center gap-1.5 transition-colors cursor-pointer text-[#1C1B19] hover:bg-[#FAF8F5]"
-                style={{ borderColor: 'var(--color-border)' }}
-                aria-expanded={isExpanded}
+                id="open-audit-report-btn"
+                onClick={() => setIsAuditModalOpen(true)}
+                className="flex-1 sm:flex-initial justify-center font-mono text-2xs uppercase tracking-wider font-bold px-3 py-2 rounded-[2px] border flex items-center gap-1.5 transition-colors cursor-pointer text-white bg-[#17212B] hover:bg-[#363430] border-[#17212B] whitespace-nowrap"
               >
-                <span>{isExpanded ? 'HIDE' : 'VULNERABILITIES'}</span>
-                <span
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                  style={{ backgroundColor: config.color }}
-                >
-                  {legRisks.length}
-                </span>
-                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                <Sparkles size={13} className="text-[#E5A93C] flex-shrink-0" />
+                <span>AUDIT REPORT</span>
               </button>
-            ) : (
-              <div className="font-mono text-2xs uppercase font-bold text-[#2B5D5C] px-2.5 py-1 rounded-[2px] bg-[#EDF4F4] border border-[#BDD7D6]">
-                0 RISKS FLAGGED ✓
-              </div>
-            )}
+
+              {/* Expand / Details Toggle Button */}
+              {legRisks.length > 0 ? (
+                <button
+                  type="button"
+                  id="toggle-risk-breakdown-btn"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="flex-1 sm:flex-initial justify-center font-mono text-2xs uppercase tracking-wider font-semibold px-3 py-2 rounded-[2px] border flex items-center gap-1.5 transition-colors cursor-pointer text-[#17212B] hover:bg-[#F7F4EE] whitespace-nowrap"
+                  style={{ borderColor: 'var(--color-border)' }}
+                  aria-expanded={isExpanded}
+                >
+                  <span>{isExpanded ? 'HIDE' : 'VULNERABILITIES'}</span>
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                    style={{ backgroundColor: config.color }}
+                  >
+                    {legRisks.length}
+                  </span>
+                  {isExpanded ? <ChevronUp size={13} className="flex-shrink-0" /> : <ChevronDown size={13} className="flex-shrink-0" />}
+                </button>
+              ) : (
+                <div className="font-mono text-2xs uppercase font-bold text-[#0A1E30] px-2.5 py-1.5 rounded-[2px] bg-[#E8EEF4] border border-[#A8C0D4] flex-1 sm:flex-initial text-center whitespace-nowrap">
+                  0 RISKS FLAGGED ✓
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -174,11 +198,11 @@ export default function TripRiskBadge({ itinerary }: Props) {
             backgroundColor: 'var(--color-bg-surface-alt)',
           }}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-2xs uppercase tracking-widest font-bold text-[#6B6760]">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-1">
+            <span className="font-mono text-2xs uppercase tracking-widest font-bold text-[#4A5568]">
               SCHEDULE VULNERABILITIES (SORTED BY RISK IMPACT)
             </span>
-            <span className="font-mono text-2xs text-[#969188]">
+            <span className="font-mono text-2xs text-[#8896A4]">
               {legRisks.length} CONNECTION{legRisks.length !== 1 ? 'S' : ''} FLAGGED
             </span>
           </div>
@@ -200,11 +224,11 @@ export default function TripRiskBadge({ itinerary }: Props) {
                   />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[#1C1B19]">
+                      <span className="font-mono text-xs font-bold text-[#17212B]">
                         {risk.connectionLabel}
                       </span>
                     </div>
-                    <p className="text-xs text-[#6B6760] font-body mt-0.5">
+                    <p className="text-xs text-[#4A5568] font-body mt-0.5">
                       {risk.reason}
                     </p>
                   </div>
@@ -237,6 +261,14 @@ export default function TripRiskBadge({ itinerary }: Props) {
           </div>
         </div>
       )}
+
+      {/* Deep-Dive Multi-Factor Resilience Audit Modal */}
+      <ResilienceAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        itinerary={itinerary}
+        riskScore={riskScore}
+      />
     </div>
   );
 }

@@ -1,12 +1,15 @@
 // =============================================================================
 // planB — Travel Disruption Recovery Platform
 // FILE: nlDisruptionEngine.ts
-// PURPOSE: Natural-language disruption parser using Groq.
+// PURPOSE: Natural-language disruption parser.
+//   PRIMARY:  Nugen Intelligence (travel-domain-aligned model via nugenDisruptionEngine.ts)
+//   FALLBACK: Groq (if Nugen key is absent or Nugen call fails)
 //   Extracts a valid Disruption object or clarification request from traveler input.
 //   Matches references ("my flight", "the cab") to active itinerary bookings.
 // =============================================================================
 
 import type { Itinerary, Disruption, Booking } from './types';
+import { parseDisruptionWithNugen, isNugenConfigured } from './nugenDisruptionEngine';
 
 // ---------------------------------------------------------------------------
 // TYPES
@@ -32,7 +35,7 @@ const MODEL = 'openai/gpt-oss-120b';
 // ---------------------------------------------------------------------------
 // SYSTEM PROMPT BUILDER
 // ---------------------------------------------------------------------------
-function buildSystemPrompt(bookings: Booking[]): string {
+function buildSystemPrompt(bookings: Booking[], activeDisruption?: import('./types').Disruption | null): string {
   const simplifiedBookings = bookings.map((b) => ({
     id: b.id,
     type: b.type,
@@ -43,12 +46,27 @@ function buildSystemPrompt(bookings: Booking[]): string {
     status: b.status,
   }));
 
+  // Build a summary of any currently active disruption so the LLM understands
+  // the accumulated state. This is critical for cumulative updates:
+  // "delayed 1 more hour" must be interpreted as +1h on top of any existing delay,
+  // not as replacing it. We surface this explicitly so the LLM can reason correctly.
+  const activeDisruptionSection = activeDisruption
+    ? `\nACTIVELY SIMULATED DISRUPTION (already applied to this itinerary):
+${JSON.stringify({
+  bookingId: activeDisruption.bookingId,
+  disruptionType: activeDisruption.disruptionType,
+  delayMinutes: activeDisruption.delayMinutes ?? 0,
+  reason: activeDisruption.reason,
+}, null, 2)}
+IMPORTANT: If the traveler's new message is an UPDATE to this same booking (e.g. "delayed 1 more hour", "now delayed by 4 hours total", "another 30 minutes"), extract the NEW ADDITIONAL delay they are describing, NOT the total. The caller will add it to the existing ${activeDisruption.delayMinutes ?? 0} minutes. If the traveler states a new TOTAL (e.g. "now delayed 4 hours total"), set "isAbsoluteTotal": true and "delayMinutes" to the full total they stated.\n`
+    : '';
+
   return `You are a flight and travel operations dispatch parser for planB.
 Your task is to analyze a traveler's natural language disruption statement, match it to a specific booking from their active itinerary, and return a structured disruption JSON.
 
 ACTIVE ITINERARY BOOKINGS:
 ${JSON.stringify(simplifiedBookings, null, 2)}
-
+${activeDisruptionSection}
 DISRUPTION SPECIFICATION:
 - "disruptionType" must be either "delay" or "cancellation".
 - For delays: extract or calculate "delayMinutes" as an integer (e.g., "3 hours" = 180, "45 mins" = 45, "half an hour" = 30, "1h 15m" = 75).
@@ -70,6 +88,7 @@ Case A (Unambiguous Disruption):
   "bookingId": "<exact id from active bookings, e.g. bkg-flight-1>",
   "disruptionType": "delay" | "cancellation",
   "delayMinutes": <number, required if delay>,
+  "isAbsoluteTotal": <boolean, true only if the user stated the new TOTAL delay, false if they stated an additional increment>,
   "reason": "<concise 1-sentence ops cause, e.g. Inbound flight delayed 180 min>"
 }
 
@@ -135,7 +154,8 @@ async function callGroqForDisruption(
 export async function parseDisruptionFromText(
   userText: string,
   itinerary: Itinerary,
-  clarificationHistory?: { originalQuery: string; clarificationQuestion: string }
+  clarificationHistory?: { originalQuery: string; clarificationQuestion: string },
+  activeDisruption?: import('./types').Disruption | null
 ): Promise<ParseDisruptionResult> {
   if (!userText.trim()) {
     throw new Error('Please enter a disruption description to simulate.');
@@ -145,7 +165,34 @@ export async function parseDisruptionFromText(
     throw new Error('The current itinerary contains no bookings to disrupt.');
   }
 
-  const systemPrompt = buildSystemPrompt(itinerary.bookings);
+  // ---------------------------------------------------------------------------
+  // PRIMARY: Nugen Intelligence (travel-domain-aligned model)
+  // Routes through nugenDisruptionEngine.ts which calls:
+  //   POST https://api.nugen.in/api/v3/inference/chat/completions
+  // Falls back to Groq if Nugen is not configured or call fails.
+  // ---------------------------------------------------------------------------
+  if (isNugenConfigured()) {
+    try {
+      const nugenResult = await parseDisruptionWithNugen(
+        userText,
+        itinerary,
+        clarificationHistory,
+        activeDisruption
+      );
+      // Return Nugen result directly (same shape as ParseDisruptionResult)
+      return nugenResult as ParseDisruptionResult;
+    } catch (nugenErr) {
+      console.warn('[NlDisruptionEngine] Nugen failed, falling back to Groq:', nugenErr);
+      // Fall through to Groq below
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // FALLBACK: Groq (original implementation)
+  // ---------------------------------------------------------------------------
+  // Pass the active disruption into the system prompt so the LLM understands
+  // accumulated state (e.g. "delayed 1 more hour" on top of an existing 3h delay).
+  const systemPrompt = buildSystemPrompt(itinerary.bookings, activeDisruption);
 
   let promptContent = userText.trim();
   if (clarificationHistory) {
@@ -199,7 +246,25 @@ export async function parseDisruptionFromText(
   let delayMinutes: number | undefined = undefined;
   if (disruptionType === 'delay') {
     const parsedMins = Number(parsed.delayMinutes);
-    delayMinutes = Number.isFinite(parsedMins) && parsedMins > 0 ? Math.round(parsedMins) : 60;
+    const extractedMins = Number.isFinite(parsedMins) && parsedMins > 0 ? Math.round(parsedMins) : 60;
+    const isAbsoluteTotal = parsed.isAbsoluteTotal === true;
+
+    // CUMULATIVE DELAY LOGIC:
+    // If there is already an active disruption on the SAME booking and the LLM
+    // returned an incremental amount (isAbsoluteTotal = false), add the new
+    // minutes on top of the existing total.
+    // If the user stated a new absolute total ("now 4 hours total"), use that directly.
+    if (
+      !isAbsoluteTotal &&
+      activeDisruption &&
+      activeDisruption.disruptionType === 'delay' &&
+      activeDisruption.bookingId === bookingId &&
+      typeof activeDisruption.delayMinutes === 'number'
+    ) {
+      delayMinutes = activeDisruption.delayMinutes + extractedMins;
+    } else {
+      delayMinutes = extractedMins;
+    }
   }
 
   const reason =

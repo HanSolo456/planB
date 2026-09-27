@@ -10,6 +10,7 @@
 // =============================================================================
 
 import type { Itinerary, Booking, CancellationPolicy, Location } from './types';
+import { createTripId } from './tripStorage';
 
 // ---------------------------------------------------------------------------
 // EXTRACTION PROMPT
@@ -34,7 +35,10 @@ interface Booking {
   provider: string;     // airline, hotel chain, operator, etc.
   startTime: string;    // ISO 8601 with offset, e.g. "2024-12-15T06:30:00+05:30"
   endTime: string;
-  location: { type: "named"; name: string } | { type: "coordinates"; lat: number; lng: number; label?: string };
+  location: { type: "coordinates"; lat: number; lng: number; label: string };
+  // ALWAYS use coordinates type. Never use "named". lat/lng are the real-world GPS
+  // coordinates of the booking's primary location (hotel address, airport, activity site).
+  // label is a short human-readable name, e.g. "Leh Airport (IXL)" or "W Goa, Vagator Beach".
   dependsOn: string[];  // IDs of bookings that must complete before this one
   bufferMinutes: number; // min gap needed after last dependency ends
   cost: number;         // numeric, in INR
@@ -53,6 +57,18 @@ interface Itinerary {
 }
 
 RULES:
+0. LOCATION IS ALWAYS COORDINATES — NEVER "named". Every booking.location must be
+   { type: "coordinates", lat: <number>, lng: <number>, label: "<short name>" }.
+   Use your knowledge of real-world GPS coordinates for airports (by IATA code), hotels
+   (by address), and activity sites (by place name). If unsure, use the city centre coords.
+   Examples:
+     - BLR airport → { type:"coordinates", lat:13.1986, lng:77.7066, label:"Bengaluru Airport (BLR)" }
+     - IXL airport → { type:"coordinates", lat:34.1359, lng:77.5465, label:"Leh Airport (IXL)" }
+     - W Goa hotel → { type:"coordinates", lat:15.5993, lng:73.7443, label:"W Goa, Vagator Beach" }
+     - Pangong Lake → { type:"coordinates", lat:33.7594, lng:78.6431, label:"Pangong Tso Lake" }
+   For flights, location is the DEPARTURE airport. Also populate meta.destinationIata and
+   meta.destinationCoords for the arrival airport so the map can draw the flight arc:
+     meta: { flightNumber:"IX-537", destinationIata:"IXL", destinationCoords:[34.1359,77.5465] }
 1. Extract EVERY segment: flights, trains, hotels, airport transfers, activities, events.
 2. ID slugs: "bkg-flight-1", "bkg-hotel-1", "bkg-transfer-1", "bkg-activity-1", etc.
    - If there are multiple hotels, use "bkg-hotel-1", "bkg-hotel-2", etc.
@@ -65,12 +81,13 @@ RULES:
    c. HOTEL with a transfer: dependsOn = [the transfer ID], bufferMinutes = 30 (check-in formalities).
       HOTEL without a transfer: dependsOn = [the inbound flight/train ID], bufferMinutes = 45 or 60.
    d. ACTIVITIES during a hotel stay (startTime is between hotel check-in and checkout):
-      — dependsOn = [the inbound FLIGHT or TRAIN id, NOT the hotel id].
-      — CRITICAL: The impact engine uses endTime (checkout) as reference for hotel deps.
-        Depending on the hotel would create a false huge negative shortfall for mid-stay activities.
-      — bufferMinutes = a small MINIMUM REQUIRED value: 60 min for same-day activities,
-        1440 min (24h) if the activity is the next calendar day (overnight rest needed).
-        DO NOT set bufferMinutes to the actual available time. It is the minimum required gap.
+       — dependsOn = [the HOTEL id] (NOT the flight or train).
+       — The impact engine uses check-in (startTime) as the reference for hotel deps,
+         so buffer is measured from check-in to activity start — which is correct.
+       — bufferMinutes = minimum required gap FROM check-in:
+           60 min if the activity is the same calendar day as check-in.
+           1440 min (24h) if the activity is any day after the check-in day (overnight rest needed).
+         DO NOT set bufferMinutes to the actual available time. It is the minimum required gap.
    e. RETURN transport (flight/train/bus): dependsOn = [the hotel id], bufferMinutes = 60.
    f. Hotel extension (second stay at same property): dependsOn = [the day-trip activity that bridges
       the two stay periods, or the previous hotel id if nothing bridges them], bufferMinutes = 30.
@@ -80,8 +97,8 @@ RULES:
    - International flight landing → next segment: 60 min required
    - Train arrival → next segment: 20 min required
    - Transfer drop-off → hotel check-in: 30 min required
-   - Hotel check-in → next-day activity: 1440 min required (must arrive and sleep)
    - Hotel check-in → same-day activity (later same day): 60 min required
+   - Hotel check-in → next-day activity: 1440 min required (must arrive and sleep)
    - Hotel check-out → departure transport: 60 min required
    - No dependsOn: bufferMinutes = 0
 6. CANCELLATION POLICY — infer conservatively:
@@ -244,8 +261,8 @@ export async function extractItineraryFromText(rawText: string): Promise<Itinera
     );
   }
 
-  // Ensure a unique ID so multiple imports don't clash
-  (parsed as Itinerary).id = `imported-${Date.now()}`;
+  // Ensure a clean, readable, unique ID so multiple imports don't clash
+  (parsed as Itinerary).id = createTripId((parsed as Itinerary).destination);
 
   return parsed as Itinerary;
 }
